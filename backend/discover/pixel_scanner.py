@@ -167,32 +167,32 @@ def detect_burned_in_text(gray: np.ndarray, modality: str = "") -> List[Discover
     text_pixels = ((tophat >= 20) & (gray >= 140)).astype(np.uint8) * 255
     
     # Dilate horizontally to join individual character strokes into words & lines
-    k_line = cv2.getStructuringElement(cv2.MORPH_RECT, (35, 3))
+    k_line = cv2.getStructuringElement(cv2.MORPH_RECT, (35, 1))
     dilated = cv2.dilate(text_pixels, k_line, iterations=1)
     
     contours, _ = cv2.findContours(dilated, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     for c in contours:
         x, y, w, h = cv2.boundingRect(c)
         roi_mean = float(np.mean(gray[y:y+h, x:x+w])) if (h > 0 and w > 0) else 0.0
-        is_header = (y + h <= int(img_h * 0.18)) or (y < int(img_h * 0.16))
-        is_footer = (y >= int(img_h * 0.85))
-        is_side_dark = (x < int(img_w * 0.15) or x > int(img_w * 0.85)) and (roi_mean < 75.0)
-        is_margin = (is_header and roi_mean < 80.0) or (is_footer and roi_mean < 80.0) or is_side_dark
+        is_header = (y + h <= int(img_h * 0.14)) or ((y < int(img_h * 0.18)) and not (int(img_w * 0.35) <= x <= int(img_w * 0.65)))
+        is_footer = (y >= int(img_h * 0.84)) or ((y >= int(img_h * 0.82)) and not (int(img_w * 0.35) <= x <= int(img_w * 0.65)))
+        is_side = (x < int(img_w * 0.12) or x > int(img_w * 0.88)) and (roi_mean < 75.0)
+        is_margin = is_header or is_footer or is_side
         if 3 <= h <= 50 and w >= 15 and is_margin:
             raw_boxes.append([x, y, w, h])
 
     # Direct thresholding for bright annotations on dark backgrounds
     _, thresh_direct = cv2.threshold(gray, 180, 255, cv2.THRESH_BINARY)
-    k_direct = cv2.getStructuringElement(cv2.MORPH_RECT, (15, 3))
+    k_direct = cv2.getStructuringElement(cv2.MORPH_RECT, (15, 1))
     dilated_direct = cv2.dilate(thresh_direct, k_direct, iterations=1)
     contours_direct, _ = cv2.findContours(dilated_direct, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     for c in contours_direct:
         x, y, w, h = cv2.boundingRect(c)
         roi_mean = float(np.mean(gray[y:y+h, x:x+w])) if (h > 0 and w > 0) else 0.0
-        is_header = (y + h <= int(img_h * 0.18)) or (y < int(img_h * 0.16))
-        is_footer = (y >= int(img_h * 0.85))
-        is_side_dark = (x < int(img_w * 0.15) or x > int(img_w * 0.85)) and (roi_mean < 75.0)
-        is_margin = (is_header and roi_mean < 80.0) or (is_footer and roi_mean < 80.0) or is_side_dark
+        is_header = (y + h <= int(img_h * 0.14)) or ((y < int(img_h * 0.18)) and not (int(img_w * 0.35) <= x <= int(img_w * 0.65)))
+        is_footer = (y >= int(img_h * 0.84)) or ((y >= int(img_h * 0.82)) and not (int(img_w * 0.35) <= x <= int(img_w * 0.65)))
+        is_side = (x < int(img_w * 0.12) or x > int(img_w * 0.88)) and (roi_mean < 75.0)
+        is_margin = is_header or is_footer or is_side
         if 3 <= h <= 50 and 15 <= w <= int(img_w * 0.9) and is_margin:
             raw_boxes.append([x, y, w, h])
 
@@ -231,6 +231,11 @@ def detect_burned_in_text(gray: np.ndarray, modality: str = "") -> List[Discover
                     inter_area = (ox2 - ox1) * (oy2 - oy1)
                     min_area = min(w * h, fw * fh)
                     if (inter_area / min_area) > 0.3:
+                        nx = min(fx, x)
+                        ny = min(fy, y)
+                        nw = max(fx + fw, x + w) - nx
+                        nh = max(fy + fh, y + h) - ny
+                        f.bbox = [int(nx), int(ny), int(nw), int(nh)]
                         overlap = True
                         break
         if not overlap:

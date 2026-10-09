@@ -135,7 +135,7 @@ class IndependentValidator:
             k_tophat = cv2.getStructuringElement(cv2.MORPH_RECT, (9, 9))
             tophat_val = cv2.morphologyEx(gray_proc, cv2.MORPH_TOPHAT, k_tophat)
             text_pixels_val = ((tophat_val >= 20) & (gray_proc >= 140)).astype(np.uint8) * 255
-            k_line_val = cv2.getStructuringElement(cv2.MORPH_RECT, (35, 3))
+            k_line_val = cv2.getStructuringElement(cv2.MORPH_RECT, (35, 1))
             dilated_val = cv2.dilate(text_pixels_val, k_line_val, iterations=1)
             contours_val, _ = cv2.findContours(dilated_val, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
@@ -143,10 +143,10 @@ class IndependentValidator:
             for c in contours_val:
                 cx, cy, cw, ch = cv2.boundingRect(c)
                 roi_mean = float(np.mean(gray_proc[cy:cy+ch, cx:cx+cw])) if (ch > 0 and cw > 0) else 0.0
-                is_header = (cy + ch <= int(img_h * 0.18)) or (cy < int(img_h * 0.16))
-                is_footer = (cy >= int(img_h * 0.85))
-                is_side_dark = (cx < int(img_w * 0.15) or cx > int(img_w * 0.85)) and (roi_mean < 75.0)
-                is_margin = (is_header and roi_mean < 80.0) or (is_footer and roi_mean < 80.0) or is_side_dark
+                is_header = (cy + ch <= int(img_h * 0.14)) or ((cy < int(img_h * 0.18)) and not (int(img_w * 0.35) <= cx <= int(img_w * 0.65)))
+                is_footer = (cy >= int(img_h * 0.84)) or ((cy >= int(img_h * 0.82)) and not (int(img_w * 0.35) <= cx <= int(img_w * 0.65)))
+                is_side = (cx < int(img_w * 0.12) or cx > int(img_w * 0.88)) and (roi_mean < 75.0)
+                is_margin = is_header or is_footer or is_side
                 stroke_count = cv2.countNonZero(text_pixels_val[cy:cy+ch, cx:cx+cw]) if (ch > 0 and cw > 0) else 0
                 if 3 <= ch <= 50 and cw >= 15 and stroke_count >= 8 and is_margin:
                     center_x, center_y = cx + cw // 2, cy + ch // 2
