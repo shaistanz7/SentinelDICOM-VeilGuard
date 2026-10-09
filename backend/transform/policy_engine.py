@@ -263,6 +263,7 @@ class PolicyTransformEngine:
         # 9. Standard De-identification Attributes
         out_ds.PatientIdentityRemoved = "YES"
         policy_title = self.policy.get("name", "Strict Research Release")
-        out_ds.DeidentificationMethod = f"Sentinel DICOM VeilGuard; Policy: {policy_title}; ISO 10918-1 Solid Masking"
+        method_str = f"Sentinel VeilGuard; Policy: {policy_title}"
+        out_ds.DeidentificationMethod = method_str[:64]
 
         return out_ds, self.changes_log

@@ -90,14 +90,27 @@ def create_base_dicom(
 
     return ds
 
+ASSETS_DIR = SAMPLES_DIR / "assets"
+
+def _synthetic_brain_ct(rows: int, cols: int) -> np.ndarray:
+    img = np.full((rows, cols), 24, dtype=np.uint16)
+    center = (cols // 2, rows // 2)
+    cv2.ellipse(img, center, (170, 210), 0, 0, 360, 2024, -1)
+    cv2.ellipse(img, center, (150, 190), 0, 0, 360, 1059, -1)
+    cv2.ellipse(img, (center[0] - 25, center[1] - 20), (12, 35), -15, 0, 360, 1029, -1)
+    cv2.ellipse(img, (center[0] + 25, center[1] - 20), (12, 35), 15, 0, 360, 1029, -1)
+    for r in range(120, 145, 6):
+        cv2.ellipse(img, center, (r, int(r * 1.2)), 0, 0, 360, 1045, 2)
+    return img
+
 def generate_sample_cranial_ct(output_path: Path) -> Path:
-    """Generates synthetic cranial CT slice with burned-in text, private tags, and nested sequences."""
+    """Generates cranial CT slice using real clinical scan with burned-in text, private tags, and nested sequences."""
     rows, cols = 512, 512
     ds = create_base_dicom(
         rows=rows,
         cols=cols,
         modality="CT",
-        patient_name="DOE^JOHN^A",
+        patient_name="DOE^JOHN^PATRICK",
         patient_id="MRN-100234-CT",
         birth_date="19780412",
         study_desc="Brain CT Trauma Scan"
@@ -116,37 +129,32 @@ def generate_sample_cranial_ct(output_path: Path) -> Path:
     seq.append(item1)
     ds.RequestAttributesSequence = seq
 
-    # 3. Realistic Brain Slice Pixel Array
-    # Background air = -1000 HU -> stored value = 24 (-1000 - (-1024))
-    img = np.full((rows, cols), 24, dtype=np.uint16)
-    center = (cols // 2, rows // 2)
+    # 3. Load Real Clinical Cranial CT Scan
+    asset_path = ASSETS_DIR / "real_cranial_ct.jpg"
+    if asset_path.exists():
+        raw_img = cv2.imread(str(asset_path), cv2.IMREAD_GRAYSCALE)
+        if raw_img is not None:
+            resized = cv2.resize(raw_img, (cols, rows))
+            # Scale to realistic CT Hounsfield range: air (-1000 HU -> 24), bone (+1000 HU -> 2024)
+            img = (resized.astype(np.float32) / 255.0 * 2000.0 + 24.0).astype(np.uint16)
+        else:
+            img = _synthetic_brain_ct(rows, cols)
+    else:
+        img = _synthetic_brain_ct(rows, cols)
 
-    # Skull outer ellipse (bone ~ +1000 HU -> stored value 2024)
-    cv2.ellipse(img, center, (170, 210), 0, 0, 360, 2024, -1)
-    # Brain tissue inside skull (~ +35 HU -> stored value 1059)
-    cv2.ellipse(img, center, (150, 190), 0, 0, 360, 1059, -1)
-    # Ventricles (~ +5 HU -> stored value 1029)
-    cv2.ellipse(img, (center[0] - 25, center[1] - 20), (12, 35), -15, 0, 360, 1029, -1)
-    cv2.ellipse(img, (center[0] + 25, center[1] - 20), (12, 35), 15, 0, 360, 1029, -1)
-    # Sulci wrinkles
-    for r in range(120, 145, 6):
-        cv2.ellipse(img, center, (r, int(r * 1.2)), 0, 0, 360, 1045, 2)
+    # 4. Burned-in Header Text overlay (only needed for synthetic fallback)
+    if not asset_path.exists() or raw_img is None:
+        text_overlay = np.zeros((rows, cols), dtype=np.uint8)
+        cv2.putText(text_overlay, "DOE, JOHN PATRICK", (20, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.65, 255, 2)
+        cv2.putText(text_overlay, "DOB: 1978-04-12  ID: MRN-100234-CT", (20, 52), cv2.FONT_HERSHEY_SIMPLEX, 0.50, 255, 1)
+        img[text_overlay > 0] = 1850
 
-    # 4. Burned-in Text in top-left quadrant (simulating burned-in PHI on display)
-    # Text in high intensity (stored value ~1800)
-    text_overlay = np.zeros((rows, cols), dtype=np.uint8)
-    cv2.putText(text_overlay, "DOE, JOHN A.", (20, 35), cv2.FONT_HERSHEY_SIMPLEX, 0.65, 255, 2)
-    cv2.putText(text_overlay, "DOB: 1978-04-12  ID: MRN-100234-CT", (20, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.55, 255, 1)
-    cv2.putText(text_overlay, "ST JUDE METRO HOSPITAL 2026-03-15", (20, 85), cv2.FONT_HERSHEY_SIMPLEX, 0.45, 255, 1)
-
-    img[text_overlay > 0] = 1850
     ds.PixelData = img.tobytes()
-
     pydicom.dcmwrite(str(output_path), ds, write_like_original=False)
     return output_path
 
 def generate_sample_chest_xray(output_path: Path) -> Path:
-    """Generates synthetic Chest Radiograph (DX) with burned-in text and a scannable QR code."""
+    """Generates Chest Radiograph (DX) using real clinical scan with burned-in text and a scannable QR code."""
     rows, cols = 512, 512
     ds = create_base_dicom(
         rows=rows,
@@ -162,16 +170,17 @@ def generate_sample_chest_xray(output_path: Path) -> Path:
     ds.add_new((0x0029, 0x0010), "LO", "VENDOR_CALIBRATION_TAG")
     ds.add_new((0x0029, 0x1020), "ST", "Private Patient Insurance: BlueCross PPO #99238411; Policyholder: Eleanor Smith")
 
-    # Image: Chest X-ray anatomy
-    img = np.full((rows, cols), 500, dtype=np.uint16)
-    # Lung fields (darker, lower absorption)
-    cv2.ellipse(img, (180, 260), (75, 140), 10, 0, 360, 120, -1)
-    cv2.ellipse(img, (332, 260), (75, 140), -10, 0, 360, 120, -1)
-    # Mediastinum / Heart shadow (brighter)
-    cv2.ellipse(img, (260, 310), (60, 85), -20, 0, 360, 750, -1)
-    # Spine and ribs
-    for y in range(160, 420, 30):
-        cv2.line(img, (120, y), (390, y + 15), 350, 6)
+    # Load Real Clinical Chest X-ray
+    asset_path = ASSETS_DIR / "real_chest_xray.jpg"
+    if asset_path.exists():
+        raw_img = cv2.imread(str(asset_path), cv2.IMREAD_GRAYSCALE)
+        if raw_img is not None:
+            resized = cv2.resize(raw_img, (cols, rows))
+            img = (resized.astype(np.float32) / 255.0 * 900.0 + 50.0).astype(np.uint16)
+        else:
+            img = np.full((rows, cols), 500, dtype=np.uint16)
+    else:
+        img = np.full((rows, cols), 500, dtype=np.uint16)
 
     # Burned-in Patient Header Text
     text_overlay = np.zeros((rows, cols), dtype=np.uint8)
@@ -179,7 +188,7 @@ def generate_sample_chest_xray(output_path: Path) -> Path:
     cv2.putText(text_overlay, "MRN: XR-44102-B  DOB: 1985-09-20", (25, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.55, 255, 1)
     img[text_overlay > 0] = 950
 
-    # Plant a Real Standard QR Code in bottom-right corner!
+    # Plant a Real Standard QR Code in bottom-right corner
     qr_content = "PATIENT: ELEANOR SMITH | DOB: 1985-09-20 | SSN: 987-65-4321 | MRN: XR-44102-B"
     try:
         import qrcode
@@ -190,10 +199,8 @@ def generate_sample_chest_xray(output_path: Path) -> Path:
         qr_np = np.array(qr_pil.convert("L"))
         q_h, q_w = qr_np.shape
         qx, qy = cols - q_w - 20, rows - q_h - 20
-        # Map white to high value (950), black to dark value (50)
         img[qy:qy+q_h, qx:qx+q_w] = np.where(qr_np < 128, 50, 950)
     except Exception:
-        # Fallback manual pattern
         qr_size = 90
         qr_img = np.zeros((qr_size, qr_size), dtype=np.uint8)
         qr_img[2:qr_size-2, 2:qr_size-2] = 255
@@ -209,7 +216,7 @@ def generate_sample_chest_xray(output_path: Path) -> Path:
     return output_path
 
 def generate_sample_ultrasound_borderline(output_path: Path) -> Path:
-    """Generates an Ultrasound scan with subtle, low-contrast burned-in text.
+    """Generates an Ultrasound scan using real clinical cardiac US with subtle burned-in text.
     Designed to produce confidence ~0.74, deliberately triggering the 'NEEDS HUMAN REVIEW' workflow."""
     rows, cols = 512, 512
     ds = create_base_dicom(
@@ -223,22 +230,19 @@ def generate_sample_ultrasound_borderline(output_path: Path) -> Path:
     )
     ds.PhotometricInterpretation = "MONOCHROME2"
 
-    # Ultrasound pie-slice fan field
-    img = np.full((rows, cols), 15, dtype=np.uint16)
-    mask = np.zeros((rows, cols), dtype=np.uint8)
-    cv2.ellipse(mask, (256, 60), (220, 360), 0, 45, 135, 255, -1)
-
-    # Speckle noise
-    np.random.seed(123)
-    speckle = (np.random.rayleigh(scale=35, size=(rows, cols))).astype(np.uint16)
-    img = np.where(mask > 0, speckle + 30, img)
-
-    # Heart chambers
-    cv2.ellipse(img, (230, 280), (45, 60), -20, 0, 360, 20, -1)
-    cv2.ellipse(img, (285, 290), (35, 50), 20, 0, 360, 20, -1)
+    # Load Real Clinical Cardiac Ultrasound Scan
+    asset_path = ASSETS_DIR / "real_cardiac_us.jpg"
+    if asset_path.exists():
+        raw_img = cv2.imread(str(asset_path), cv2.IMREAD_GRAYSCALE)
+        if raw_img is not None:
+            resized = cv2.resize(raw_img, (cols, rows))
+            img = (resized.astype(np.float32) / 255.0 * 200.0 + 15.0).astype(np.uint16)
+        else:
+            img = np.full((rows, cols), 15, dtype=np.uint16)
+    else:
+        img = np.full((rows, cols), 15, dtype=np.uint16)
 
     # Low-contrast, subtle burned-in operator watermark in top right
-    # Low contrast simulates tricky sonographer notes that need human reviewer validation
     text_overlay = np.zeros((rows, cols), dtype=np.uint8)
     cv2.putText(text_overlay, "WILLIAMS R. / TECH: KD", (280, 35), cv2.FONT_HERSHEY_SIMPLEX, 0.42, 255, 1)
     cv2.putText(text_overlay, "ID: US-77192 HOSP-STJ", (280, 55), cv2.FONT_HERSHEY_SIMPLEX, 0.38, 255, 1)
@@ -250,7 +254,7 @@ def generate_sample_ultrasound_borderline(output_path: Path) -> Path:
     return output_path
 
 def generate_sample_adversarial_quarantine(output_path: Path) -> Path:
-    """Generates an adversarial sample with persistent unredactable hidden PHI
+    """Generates an adversarial sample using real skull base CT with persistent unredactable hidden PHI
     that deliberately FAILS independent validation / red-team test to prove fail-closed behavior."""
     rows, cols = 512, 512
     ds = create_base_dicom(
@@ -267,10 +271,17 @@ def generate_sample_adversarial_quarantine(output_path: Path) -> Path:
     ds.add_new((0x0099, 0x1001), "LO", "EXPLOIT_PAYLOAD:LEAKED_SSN=000-11-2222_DOE")
     ds.add_new((0x0033, 0x1005), "ST", "PATIENT_NAME_EMBEDDED_CORRUPTED_LEAK_SECRET_42")
 
-    # Image with hidden high-frequency barcode embedded deep in pixels
-    img = np.full((rows, cols), 200, dtype=np.uint16)
-    cv2.circle(img, (256, 256), 180, 800, -1)
-    cv2.circle(img, (256, 256), 120, 400, -1)
+    # Load Real Skull Base CT Scan
+    asset_path = ASSETS_DIR / "real_skull_base_ct.jpg"
+    if asset_path.exists():
+        raw_img = cv2.imread(str(asset_path), cv2.IMREAD_GRAYSCALE)
+        if raw_img is not None:
+            resized = cv2.resize(raw_img, (cols, rows))
+            img = (resized.astype(np.float32) / 255.0 * 800.0 + 50.0).astype(np.uint16)
+        else:
+            img = np.full((rows, cols), 200, dtype=np.uint16)
+    else:
+        img = np.full((rows, cols), 200, dtype=np.uint16)
 
     # Plant a secret barcode at center that tests red team detection
     for bx in range(200, 310, 4):

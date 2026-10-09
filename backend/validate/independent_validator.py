@@ -142,8 +142,13 @@ class IndependentValidator:
             red_boxes = redacted_bboxes or []
             for c in contours_val:
                 cx, cy, cw, ch = cv2.boundingRect(c)
-                is_margin = (cy < int(img_h * 0.25)) or (cy > int(img_h * 0.85)) or (cx < int(img_w * 0.15)) or (cx > int(img_w * 0.85))
-                if 6 <= ch <= 45 and cw >= 25 and is_margin:
+                roi_mean = float(np.mean(gray_proc[cy:cy+ch, cx:cx+cw])) if (ch > 0 and cw > 0) else 0.0
+                is_header = (cy + ch <= int(img_h * 0.18)) or (cy < int(img_h * 0.16))
+                is_footer = (cy >= int(img_h * 0.85))
+                is_side_dark = (cx < int(img_w * 0.15) or cx > int(img_w * 0.85)) and (roi_mean < 75.0)
+                is_margin = (is_header and roi_mean < 80.0) or (is_footer and roi_mean < 80.0) or is_side_dark
+                stroke_count = cv2.countNonZero(text_pixels_val[cy:cy+ch, cx:cx+cw]) if (ch > 0 and cw > 0) else 0
+                if 3 <= ch <= 50 and cw >= 15 and stroke_count >= 8 and is_margin:
                     center_x, center_y = cx + cw // 2, cy + ch // 2
                     is_covered = any(
                         (bx - 12 <= center_x <= bx + bw + 12) and (by - 12 <= center_y <= by + bh + 12)

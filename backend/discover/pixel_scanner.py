@@ -161,22 +161,25 @@ def detect_burned_in_text(gray: np.ndarray, modality: str = "") -> List[Discover
     is_us = (modality == "US" or "ultrasound" in modality.lower())
     raw_boxes = []
 
-    if not is_us:
-        # Top-Hat stroke isolation: separates thin character strokes from thick bone/tissue
-        k_tophat = cv2.getStructuringElement(cv2.MORPH_RECT, (9, 9))
-        tophat = cv2.morphologyEx(gray, cv2.MORPH_TOPHAT, k_tophat)
-        text_pixels = ((tophat >= 20) & (gray >= 140)).astype(np.uint8) * 255
-        
-        # Dilate horizontally to join individual character strokes into words & lines
-        k_line = cv2.getStructuringElement(cv2.MORPH_RECT, (35, 3))
-        dilated = cv2.dilate(text_pixels, k_line, iterations=1)
-        
-        contours, _ = cv2.findContours(dilated, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        for c in contours:
-            x, y, w, h = cv2.boundingRect(c)
-            is_margin = (y < int(img_h * 0.25)) or (y > int(img_h * 0.85)) or (x < int(img_w * 0.20)) or (x > int(img_w * 0.80))
-            if 6 <= h <= 45 and w >= 20 and is_margin:
-                raw_boxes.append([x, y, w, h])
+    # Top-Hat stroke isolation: separates thin character strokes from thick tissue
+    k_tophat = cv2.getStructuringElement(cv2.MORPH_RECT, (9, 9))
+    tophat = cv2.morphologyEx(gray, cv2.MORPH_TOPHAT, k_tophat)
+    text_pixels = ((tophat >= 20) & (gray >= 140)).astype(np.uint8) * 255
+    
+    # Dilate horizontally to join individual character strokes into words & lines
+    k_line = cv2.getStructuringElement(cv2.MORPH_RECT, (35, 3))
+    dilated = cv2.dilate(text_pixels, k_line, iterations=1)
+    
+    contours, _ = cv2.findContours(dilated, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    for c in contours:
+        x, y, w, h = cv2.boundingRect(c)
+        roi_mean = float(np.mean(gray[y:y+h, x:x+w])) if (h > 0 and w > 0) else 0.0
+        is_header = (y + h <= int(img_h * 0.18)) or (y < int(img_h * 0.16))
+        is_footer = (y >= int(img_h * 0.85))
+        is_side_dark = (x < int(img_w * 0.15) or x > int(img_w * 0.85)) and (roi_mean < 75.0)
+        is_margin = (is_header and roi_mean < 80.0) or (is_footer and roi_mean < 80.0) or is_side_dark
+        if 3 <= h <= 50 and w >= 15 and is_margin:
+            raw_boxes.append([x, y, w, h])
 
     # Direct thresholding for bright annotations on dark backgrounds
     _, thresh_direct = cv2.threshold(gray, 180, 255, cv2.THRESH_BINARY)
@@ -185,10 +188,13 @@ def detect_burned_in_text(gray: np.ndarray, modality: str = "") -> List[Discover
     contours_direct, _ = cv2.findContours(dilated_direct, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     for c in contours_direct:
         x, y, w, h = cv2.boundingRect(c)
-        is_margin = (y < int(img_h * 0.25)) or (y > int(img_h * 0.85)) or (x < int(img_w * 0.25)) or (x > int(img_w * 0.75))
-        if 8 <= h <= 45 and 30 <= w <= int(img_w * 0.9) and is_margin:
-            if not is_us:
-                raw_boxes.append([x, y, w, h])
+        roi_mean = float(np.mean(gray[y:y+h, x:x+w])) if (h > 0 and w > 0) else 0.0
+        is_header = (y + h <= int(img_h * 0.18)) or (y < int(img_h * 0.16))
+        is_footer = (y >= int(img_h * 0.85))
+        is_side_dark = (x < int(img_w * 0.15) or x > int(img_w * 0.85)) and (roi_mean < 75.0)
+        is_margin = (is_header and roi_mean < 80.0) or (is_footer and roi_mean < 80.0) or is_side_dark
+        if 3 <= h <= 50 and 15 <= w <= int(img_w * 0.9) and is_margin:
+            raw_boxes.append([x, y, w, h])
 
     raw_boxes.sort(key=lambda b: (b[1], b[0]))
 
