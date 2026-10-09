@@ -1,0 +1,52 @@
+name: "Teaching File"
+description: "Educational and case-presentation policy: completely blanks all patient and institution identity, preserves clinical descriptions, pathology findings, and image quality."
+version: "1.0.0"
+date_shift_days: 0
+rules:
+  direct_identifiers:
+    action: "blank"
+    tags:
+      - "PatientName"
+      - "PatientID"
+      - "InstitutionName"
+      - "ReferringPhysicianName"
+      - "PerformingPhysicianName"
+  quasi_identifiers:
+    action: "generalize_age_only" # strips birthdate, preserves age & sex
+    tags:
+      - "PatientBirthDate"
+      - "PatientAge"
+      - "PatientSex"
+  dates_and_times:
+    action: "remove"
+    tags:
+      - "StudyDate"
+      - "SeriesDate"
+  free_text:
+    action: "keep" # educational notes, study description preserved
+    tags:
+      - "StudyDescription"
+      - "SeriesDescription"
+  private_tags:
+    action: "remove_all"
+  uids:
+    action: "consistent_pseudonym"
+    tags:
+      - "StudyInstanceUID"
+      - "SeriesInstanceUID"
+      - "SOPInstanceUID"
+  pixel_phi:
+    action: "black_box_mask"
+    mask_burned_in_text: true
+    mask_barcodes: true
+    mask_qr_codes: true
+  essential_clinical_tags:
+    action: "keep"
+    tags:
+      - "Modality"
+      - "BodyPartExamined"
+      - "Rows"
+      - "Columns"
+      - "PixelSpacing"
+      - "WindowCenter"
+      - "WindowWidth"

@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>VeilGuard 3D Hero Preview</title>
+<style>
+:root{--bg:#1e1b5e;--teal:#14b8c4;--ink:#eef0ff;--mut:#b9b6f0;--ok:#22c55e;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#1e1b5e}}
+:root[data-theme="dark"]{--bg:#1e1b5e}
+html,body{height:100%;margin:0;background:var(--bg);color:var(--ink);font-family:"Segoe UI",system-ui,-apple-system,Roboto,sans-serif;overflow:hidden}
+#wrap{position:relative;height:100%;min-height:420px}
+canvas{display:block;width:100%;height:100%}
+.hud{position:absolute;left:0;right:0;pointer-events:none}
+#top{top:14px;display:flex;flex-direction:column;align-items:center;gap:10px;padding:0 12px}
+#trk{display:flex;gap:6px;list-style:none;margin:0;padding:5px;background:rgba(10,8,50,.55);border:1px solid rgba(255,255,255,.12);border-radius:999px;backdrop-filter:blur(6px);flex-wrap:wrap;justify-content:center}
+#trk li{font-size:12.5px;padding:6px 12px;border-radius:999px;color:var(--mut);display:flex;gap:6px;align-items:center;transition:all .4s}
+#trk li b{display:inline-grid;place-items:center;width:18px;height:18px;border-radius:50%;background:rgba(255,255,255,.12);font-size:11px}
+#trk li.on{background:var(--teal);color:#042a30;font-weight:700}
+#trk li.on b{background:#042a30;color:#fff}
+#trk li.done{color:#fff}
+#trk li.done b{background:var(--ok);color:#052e16}
+#chips{display:flex;gap:8px;font-size:12.5px}
+.chip{padding:5px 11px;border-radius:8px;background:rgba(10,8,50,.55);border:1px solid rgba(255,255,255,.12)}
+.chip span{font-weight:700;color:#fff;margin-left:4px}
+#verdict{position:absolute;left:50%;top:128px;transform:translate(-50%,10px) scale(.9);opacity:0;transition:all .6s cubic-bezier(.2,1.4,.4,1);background:rgba(22,163,74,.92);border:2px solid #bbf7d0;border-radius:16px;padding:10px 24px;text-align:center;box-shadow:0 0 40px rgba(34,197,94,.5)}
+#verdict.on{opacity:1;transform:translate(-50%,0) scale(1)}
+#verdict strong{display:block;font-size:22px;letter-spacing:.5px}
+#verdict small{font-size:13px;opacity:.95}
+#bottom{bottom:0;padding:70px 22px 26px;text-align:center;background:linear-gradient(transparent,rgba(30,27,94,.92) 55%)}
+#status{font-size:14px;color:#9deaf2;min-height:20px;margin-bottom:14px;transition:opacity .3s}
+.pill{display:inline-flex;gap:8px;align-items:center;font-size:13px;color:#7ee7ee;border:1px solid rgba(126,231,238,.35);background:rgba(20,184,196,.12);padding:6px 14px;border-radius:999px}
+h1{margin:14px 0 8px;font-size:clamp(30px,5vw,44px);line-height:1.08;letter-spacing:-.5px;color:#fff}
+#bottom p{margin:0 auto;max-width:520px;font-size:15px;line-height:1.5;color:var(--mut)}
+#ctl{position:absolute;right:12px;bottom:12px;display:flex;gap:6px}
+#ctl button{pointer-events:auto;cursor:pointer;font:inherit;font-size:12px;color:#fff;background:rgba(10,8,50,.7);border:1px solid rgba(255,255,255,.25);border-radius:8px;padding:6px 10px}
+#ctl button:focus-visible{outline:2px solid var(--teal);outline-offset:2px}
+#top,#bottom,#ctl{display:none}
+#verdict{top:24px}
+#fade{position:absolute;inset:0;background:#1e1b5e;opacity:0;pointer-events:none;transition:opacity .6s}
+#err{display:none;position:absolute;inset:0;align-items:center;justify-content:center;text-align:center;padding:24px}
+@media (max-width:560px){#verdict{top:24px}}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="c" aria-label="Animated 3D medical scan passing through five privacy checkpoints"></canvas>
+  <div class="hud" id="top">
+    <ol id="trk">
+      <li><b>1</b>Find</li><li><b>2</b>Clean</li><li><b>3</b>Check</li><li><b>4</b>Attack</li><li><b>5</b>Decide</li>
+    </ol>
+    <div id="chips"><div class="chip">Private items found<span id="cf">0</span></div><div class="chip">Removed<span id="cr">0</span></div><div class="chip">Re-identification risk<span id="ck">–</span></div></div>
+  </div>
+  <div id="verdict"><strong>✔ APPROVED</strong><small>Safe to share. Nothing private is left.</small></div>
+  <div class="hud" id="bottom">
+    <div id="status" aria-live="polite"></div>
+    <span class="pill">🛡 Sovereign Local-First Release Gateway</span>
+    <h1>Secure Medical Imaging</h1>
+    <p>Enterprise-grade protection, advanced pixel de-identification, and tamper-evident cryptographic audit logs for modern healthcare infrastructure.</p>
+  </div>
+  <div id="ctl"><button id="bp">Pause</button><button id="br">Replay</button></div>
+  <div id="fade"></div>
+  <div id="err">Your browser could not start 3D graphics (WebGL). The login page will show a static shield image instead.</div>
+</div>
+<script src="three.min.js"></script>
+<script>
+(()=>{
+const $=s=>document.querySelector(s);
+const cv=$('#c');let R;
+try{R=new THREE.WebGLRenderer({canvas:cv,antialias:true});}catch(e){$('#err').style.display='flex';return;}
+R.setPixelRatio(Math.min(devicePixelRatio,2));
+const BG=0x1e1b5e,TEAL=0x14b8c4,GREEN=0x22c55e,RED=0xff4d5e;
+const S=new THREE.Scene();S.background=new THREE.Color(BG);S.fog=new THREE.Fog(BG,10,40);
+const C=new THREE.PerspectiveCamera(50,1,.1,100);
+function fit(){const w=cv.clientWidth,h=cv.clientHeight;R.setSize(w,h,false);C.aspect=w/h;C.fov=w/h<.8?66:50;C.updateProjectionMatrix();}
+addEventListener('resize',fit);fit();
+
+/* helpers */
+function tx(t,fg,bg,bd,fs){const c=document.createElement('canvas');c.width=512;c.height=96;const g=c.getContext('2d');
+ g.fillStyle=bg;g.beginPath();g.roundRect?g.roundRect(4,4,504,88,22):g.rect(4,4,504,88);g.fill();g.strokeStyle=bd;g.lineWidth=4;g.stroke();
+ g.fillStyle=fg;g.font=`700 ${fs}px Consolas,Menlo,monospace`;g.textAlign='center';g.textBaseline='middle';g.fillText(t,256,50);return new THREE.CanvasTexture(c);}
+function sp(tex,w,h){const s=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,transparent:true,depthWrite:false}));s.scale.set(w,h,1);return s;}
+const rnd=(a,b)=>a+Math.random()*(b-a);
+
+/* tunnel: grid + streaks + 5 gates */
+const grid=new THREE.GridHelper(70,70,0x3b3aa0,0x2b2a82);grid.position.set(0,-3.4,-18);grid.material.transparent=true;grid.material.opacity=.55;S.add(grid);
+{const n=520,a=new Float32Array(n*3);for(let i=0;i<n;i++){const th=Math.random()*6.283,r=rnd(4.4,10);a[i*3]=Math.cos(th)*r;a[i*3+1]=Math.sin(th)*r*.7;a[i*3+2]=rnd(-48,8);}
+ const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(a,3));S.add(new THREE.Points(g,new THREE.PointsMaterial({size:.07,color:0x6ee7f0,transparent:true,opacity:.6,blending:THREE.AdditiveBlending,depthWrite:false})));}
+const GZ=[-4,-11,-18,-25,-32],NM=['FIND','CLEAN','CHECK','ATTACK','DECIDE'];
+const gates=GZ.map((z,i)=>{const g=new THREE.Group();g.position.z=z;
+ const m1=new THREE.MeshBasicMaterial({color:TEAL,transparent:true,opacity:.3}),m2=m1.clone();
+ const a=new THREE.Mesh(new THREE.TorusGeometry(3.6,.07,10,72),m1),b=new THREE.Mesh(new THREE.TorusGeometry(3.05,.035,8,6),m2);g.add(a,b);
+ const l=sp(tx(`${i+1}  ${NM[i]}`,'#eafcff','rgba(10,8,50,.8)','#14b8c4',44),3,.56);l.position.y=4.4;l.material.opacity=.45;g.add(l);
+ g.userData={m1,m2,l,b};S.add(g);return g;});
+
+/* the scan */
+const W=new THREE.Group();S.add(W);W.position.z=4;
+const sc=new THREE.Group();W.add(sc);
+const lm=new THREE.LineBasicMaterial({color:TEAL,transparent:true,opacity:.75});
+const rad=y=>{if(y>=-1.5){const u=y/1.9,k=Math.sqrt(Math.max(0,1-u*u));return[1.15*k,1.4*k];}return[.55,.6];};
+for(let y=-2.5;y<=1.9;y+=.12){const[rx,rz]=rad(y);if(rx<.05)continue;
+ const pts=new THREE.EllipseCurve(0,0,rx,rz,0,6.283).getPoints(48).map(p=>new THREE.Vector3(p.x,y,p.y));
+ sc.add(new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(pts),lm));}
+{const n=2400,a=new Float32Array(n*3);for(let i=0;i<n;i++){const y=rnd(-2.5,1.9),[rx,rz]=rad(y),f=Math.random()<.75?rnd(.62,1):Math.sqrt(Math.random()),th=Math.random()*6.283;
+ a[i*3]=Math.cos(th)*rx*f;a[i*3+1]=y;a[i*3+2]=Math.sin(th)*rz*f;}
+ const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(a,3));
+ sc.add(new THREE.Points(g,new THREE.PointsMaterial({size:.035,color:0x9be7ff,transparent:true,opacity:.8,blending:THREE.AdditiveBlending,depthWrite:false})));}
+/* burned-in text + QR (pixel PHI) */
+function stripTex(){const c=document.createElement('canvas');c.width=512;c.height=64;const g=c.getContext('2d');g.fillStyle='#111';g.fillRect(0,0,512,64);g.fillStyle='#fde047';g.font='700 24px Consolas,monospace';g.textBaseline='middle';g.fillText('DOE^JOHN 04/12/1961 ID 88-1042',12,34);return new THREE.CanvasTexture(c);}
+function qrTex(){const c=document.createElement('canvas');c.width=c.height=128;const g=c.getContext('2d');g.fillStyle='#fff';g.fillRect(0,0,128,128);g.fillStyle='#000';const n=11,s=128/n;
+ for(let i=0;i<n;i++)for(let j=0;j<n;j++){const f=(i<3&&j<3)||(i>7&&j<3)||(i<3&&j>7);if(f||Math.random()>.5)g.fillRect(i*s,j*s,s,s);}return new THREE.CanvasTexture(c);}
+const redMat=new THREE.LineBasicMaterial({color:RED});
+function pix(w,h,x,y,z,tex){const m=new THREE.Mesh(new THREE.PlaneGeometry(w,h),new THREE.MeshBasicMaterial({map:tex}));m.position.set(x,y,z);
+ const bx=new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.PlaneGeometry(w+.14,h+.14)),redMat);bx.position.set(x,y,z+.01);bx.visible=false;sc.add(m,bx);m.userData.bx=bx;return m;}
+const strip=pix(1.9,.24,0,1.0,1.23,stripTex()),qr=pix(.62,.62,0,-.45,1.4,qrTex());
+function redact(m){m.material.map=null;m.material.color.set(0x000000);m.material.needsUpdate=true;m.userData.bx.visible=false;}
+/* orbiting PHI labels */
+const LT=['NAME: DOE^JOHN','PATIENT ID 88-1042','DOB 04/12/1961','ST. MARY HOSPITAL','MRN 774201','PRIVATE TAG (0009,1010)'],LY=[1.9,.9,-.2,1.4,.2,-1.0];
+const labels=LT.map((t,i)=>{const s=sp(tx(t,'#e5e7ff','rgba(30,27,94,.88)','#8b8be0',32),2.4,.45);
+ s.userData={tn:s.material.map,tr:tx(t,'#fff','rgba(190,30,60,.95)','#ff4d5e',32),a:i/6*6.283,y:LY[i],r:3+(i%2)*.5,v:.32+i*.03,pop:0,alive:true,found:false,gone:false};W.add(s);return s;});
+/* beam, shield, pulse ring, tags */
+const beam=new THREE.Group();{const p=new THREE.Mesh(new THREE.PlaneGeometry(3.6,3.6),new THREE.MeshBasicMaterial({color:TEAL,transparent:true,opacity:.28,side:THREE.DoubleSide,blending:THREE.AdditiveBlending,depthWrite:false}));p.rotation.x=-Math.PI/2;
+ const r=new THREE.Mesh(new THREE.TorusGeometry(1.8,.03,6,64),new THREE.MeshBasicMaterial({color:0xaaf6ff}));r.rotation.x=Math.PI/2;beam.add(p,r);beam.visible=false;W.add(beam);}
+const shield=new THREE.Mesh(new THREE.SphereGeometry(2.7,32,22),new THREE.MeshBasicMaterial({color:TEAL,wireframe:true,transparent:true,opacity:0}));W.add(shield);
+const pr=new THREE.Mesh(new THREE.RingGeometry(1,1.08,64),new THREE.MeshBasicMaterial({color:TEAL,transparent:true,opacity:0,side:THREE.DoubleSide}));W.add(pr);pr.userData.t=1;
+const tg=(t,fg,bg,bd,fs,w,h)=>{const s=sp(tx(t,fg,bg,bd,fs),w,h);s.position.y=3.2;s.material.opacity=0;W.add(s);return s;};
+const tagC=tg('✔ INTEGRITY VERIFIED','#052e16','#86efac','#22c55e',30,3,.56),tagR=tg('RE-ID RISK: 3 / 100','#ecfeff','rgba(8,145,178,.95)','#67e8f9',32,3,.56),tagO=tg('APPROVED ✔','#ffffff','#16a34a','#bbf7d0',46,3.4,.64);
+/* particle pool + attackers */
+const N=1300,pp=new Float32Array(N*3),pc=new Float32Array(N*3),pb=new Float32Array(N*3),pv=new Float32Array(N*3),pl=new Float32Array(N);let pi=0;
+const pg=new THREE.BufferGeometry();pg.setAttribute('position',new THREE.BufferAttribute(pp,3));pg.setAttribute('color',new THREE.BufferAttribute(pc,3));
+const P=new THREE.Points(pg,new THREE.PointsMaterial({size:.1,vertexColors:true,transparent:true,blending:THREE.AdditiveBlending,depthWrite:false}));P.frustumCulled=false;W.add(P);
+function spawn(v,col,n,s){const c=new THREE.Color(col);for(let k=0;k<n;k++){const i=pi++%N,d=new THREE.Vector3(rnd(-1,1),rnd(-1,1),rnd(-1,1)).normalize().multiplyScalar(s*rnd(.3,1.2));
+ pp.set([v.x,v.y,v.z],i*3);pv.set([d.x,d.y,d.z],i*3);pb.set([c.r,c.g,c.b],i*3);pl[i]=1;}}
+const M=150,ap=new Float32Array(M*3).fill(999),av=new Float32Array(M*3),ag=new THREE.BufferGeometry();ag.setAttribute('position',new THREE.BufferAttribute(ap,3));
+const AT=new THREE.Points(ag,new THREE.PointsMaterial({size:.16,color:RED,transparent:true,blending:THREE.AdditiveBlending,depthWrite:false}));AT.frustumCulled=false;W.add(AT);
+function launch(i){const d=new THREE.Vector3(rnd(-1,1),rnd(-.6,.8),rnd(-1,1)).normalize(),s=rnd(3.5,6);ap.set([d.x*8,d.y*8,d.z*8],i*3);av.set([-d.x*s,-d.y*s,-d.z*s],i*3);}
+
+/* state + HUD */
+const lis=[...document.querySelectorAll('#trk li')],MSG=['Looking for hidden names and IDs…','Covering up private details…','A second, independent checker is double-checking…','A friendly hacker is trying to identify the patient…','All checks passed. Safe to share.'];
+let T=0,stage=-1,st=[0,0,0,0,0],found=0,removed=0,atk=false,lvl=0,flash=0,hold=0,paused=false,green=0;
+const sliceCol=new THREE.Color(TEAL),grn=new THREE.Color(GREEN),tl=new THREE.Color(TEAL);
+const $f=$('#cf'),$r=$('#cr'),$k=$('#ck'),$s=$('#status'),$v=$('#verdict'),$fd=$('#fade');
+function hud(){lis.forEach((l,i)=>l.className=i<stage?'done':i===stage?'on':'');if(stage===4)lis[4].className='done';$f.textContent=found;$r.textContent=removed;$k.textContent=stage>=3&&T-st[3]>2?'3 / 100':'–';$s.textContent=stage>=0?MSG[stage]:'';}
+function pulse(c){pr.material.color.set(c);pr.userData.t=0;}
+function enter(i){stage=i;st[i]=T;pulse(i===2||i===4?GREEN:TEAL);const u=gates[i].userData;u.m1.opacity=.95;u.m2.opacity=.8;u.l.material.opacity=1;if(i===4){u.m1.color.set(GREEN);u.m2.color.set(GREEN);}if(i===3){atk=true;for(let k=0;k<M;k++)launch(k);}if(i===0)beam.visible=true;if(i===4){$v.classList.add('on');hold=0;}hud();}
+function reset(){T=0;stage=-1;found=removed=0;atk=false;lvl=0;green=0;W.position.z=4;sliceCol.copy(tl);lm.color.copy(tl);
+ labels.forEach(s=>{const d=s.userData;d.alive=true;d.found=false;d.gone=false;s.visible=true;s.material.map=d.tn;s.material.opacity=1;});
+ [strip,qr].forEach((m,i)=>{m.material.map=i?qrTex():stripTex();m.material.color.set(0xffffff);m.material.needsUpdate=true;m.userData.bx.visible=false;});
+ gates.forEach(g=>{const u=g.userData;u.m1.color.set(TEAL);u.m2.color.set(TEAL);u.m1.opacity=.3;u.m2.opacity=.3;u.l.material.opacity=.45;});
+ ap.fill(999);pl.fill(0);$v.classList.remove('on');beam.visible=false;shield.material.opacity=0;[tagC,tagR,tagO].forEach(t=>t.material.opacity=0);hud();}
+const win=(x,a,b)=>x<a||x>b?0:Math.min(1,(x-a)/.4,(b-x)/.4);
+
+function tick(dt){
+ T+=dt;const z=W.position.z;
+ /* travel: slow near each gate */
+ let d=99;GZ.forEach(g=>d=Math.min(d,Math.abs(z-g)));
+ if(stage<4){W.position.z-=(2.7-2.0*Math.exp(-d*d/1.7))*dt;}
+ GZ.forEach((g,i)=>{if(stage<i&&W.position.z<=g+.25)enter(i);});
+ const ts=stage>=0?T-st[stage]:0;
+ sc.rotation.y=Math.sin(T*.5)*.8;
+ /* labels */
+ labels.forEach((s,i)=>{const u=s.userData;u.a+=u.v*dt;s.position.set(Math.cos(u.a)*u.r,u.y+Math.sin(T*1.3+i)*.1,Math.sin(u.a)*u.r);u.pop=Math.max(0,u.pop-dt*2.2);
+  const k=1+.3*u.pop;s.scale.set(2.4*k,.45*k,1);});
+ if(stage===0){beam.position.y=2.3-4.8*Math.min(1,ts/2.6);beam.visible=ts<2.8;
+  labels.forEach((s,i)=>{const u=s.userData;if(!u.found&&ts>.4+i*.28){u.found=true;s.material.map=u.tr;u.pop=1;found++;hud();}});
+  if(ts>2.0&&!strip.userData.f){strip.userData.f=1;strip.userData.bx.visible=true;found++;hud();}
+  if(ts>2.3&&!qr.userData.f){qr.userData.f=1;qr.userData.bx.visible=true;found++;hud();}}
+ if(stage===1){labels.forEach((s,i)=>{const u=s.userData;if(!u.gone&&ts>.3+i*.25){u.gone=true;spawn(s.position,0xff6a4d,34,3.2);s.visible=false;removed++;hud();}});
+  if(ts>1.9&&!strip.userData.r){strip.userData.r=1;redact(strip);spawn(strip.position,0xffd75e,20,2);removed++;hud();}
+  if(ts>2.2&&!qr.userData.r){qr.userData.r=1;redact(qr);spawn(qr.position,0xffffff,20,2);removed++;hud();}}
+ if(stage===2)tagC.material.opacity=win(ts,0,3.2);
+ if(stage===3){lvl=Math.min(1,ts/.8);if(ts>3.4&&atk){atk=false;ap.fill(999);}if(ts>3.6)lvl=Math.max(0,lvl-dt);
+  tagR.material.opacity=win(ts,1.8,4.8);if(ts>2&&ts-dt<=2)hud();}
+ if(stage===4){green=Math.min(1,ts/1.2);lm.color.copy(tl).lerp(grn,green);tagO.material.opacity=Math.min(1,ts/.5);tagO.scale.setScalar(1+.04*Math.sin(T*3));hold=ts;
+  if(hold>6.2&&!reset.q){reset.q=1;$fd.style.opacity=1;setTimeout(()=>{reset();$fd.style.opacity=0;reset.q=0;},650);}}
+ /* attackers */
+ if(atk){for(let i=0;i<M;i++){const x=ap[i*3],y=ap[i*3+1],zz=ap[i*3+2],r=Math.hypot(x,y,zz);
+  ap[i*3]+=av[i*3]*dt;ap[i*3+1]+=av[i*3+1]*dt;ap[i*3+2]+=av[i*3+2]*dt;
+  if(r<2.8&&(x*av[i*3]+y*av[i*3+1]+zz*av[i*3+2])<0){const s=5.5/r;av[i*3]=x*s+rnd(-1,1);av[i*3+1]=y*s+rnd(-1,1);av[i*3+2]=zz*s+rnd(-1,1);flash=1;if(Math.random()<.4)spawn(new THREE.Vector3(x,y,zz),0x67e8f9,3,1.5);}
+  else if(r>9)launch(i);}ag.attributes.position.needsUpdate=true;}
+ flash=Math.max(0,flash-dt*3);shield.material.opacity=lvl*.1+flash*.35*lvl;shield.rotation.y+=dt*.3;
+ /* particles */
+ for(let i=0;i<N;i++){if(pl[i]>0){pl[i]-=dt*.9;const l=Math.max(0,pl[i]);pp[i*3]+=pv[i*3]*dt;pp[i*3+1]+=pv[i*3+1]*dt;pp[i*3+2]+=pv[i*3+2]*dt;pv[i*3]*=.985;pv[i*3+1]*=.985;pv[i*3+2]*=.985;pc[i*3]=pb[i*3]*l;pc[i*3+1]=pb[i*3+1]*l;pc[i*3+2]=pb[i*3+2]*l;}else{pc[i*3]=pc[i*3+1]=pc[i*3+2]=0;}}
+ pg.attributes.position.needsUpdate=true;pg.attributes.color.needsUpdate=true;
+ /* pulse ring + gates */
+ let t=pr.userData.t;if(t<1){t=Math.min(1,t+dt*.9);pr.userData.t=t;pr.scale.setScalar(1+t*4.2);pr.material.opacity=(1-t)*.9;}else pr.material.opacity=0;
+ gates.forEach((g,i)=>{g.userData.b.rotation.z=T*(.3+i*.05);});
+ /* camera */
+ C.position.set(Math.sin(T*.25)*1.7,1.4+Math.sin(T*.2)*.25,W.position.z+8.4);C.lookAt(0,.2,W.position.z-1.5);
+}
+let last=performance.now();
+function loop(n){requestAnimationFrame(loop);const dt=Math.min(.05,(n-last)/1000);last=n;if(!paused)tick(dt);R.render(S,C);}
+$('#bp').onclick=e=>{paused=!paused;e.target.textContent=paused?'Play':'Pause';};
+$('#br').onclick=()=>{reset();strip.userData.f=strip.userData.r=qr.userData.f=qr.userData.r=0;paused=false;$('#bp').textContent='Pause';};
+const origReset=reset;
+
+hud();requestAnimationFrame(loop);
+/* clear per-run flags on auto-loop too */
+const _r=reset;reset=function(){_r();strip.userData.f=strip.userData.r=qr.userData.f=qr.userData.r=0;};
+})();
+</script>
+</body>
+</html>

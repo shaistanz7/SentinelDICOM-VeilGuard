@@ -1,0 +1,64 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+ENV/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Testing & Cache
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Node & Frontend
+node_modules/
+frontend/node_modules/
+.npm
+.eslintcache
+
+# Environment variables & secrets
+.env
+.env.*
+*.env
+
+# Local Runtime Data & Databases
+push_to_github.py
+storage/uploads/*
+storage/processed/*
+storage/quarantine/*
+storage/reports/*
+storage/*.db
+storage/*.db-journal
+!storage/.gitkeep
+!storage/uploads/.gitkeep
+!storage/processed/.gitkeep
+!storage/quarantine/.gitkeep
+!storage/reports/.gitkeep
+
+# OS & Editor
+.DS_Store
+Thumbs.db
+ehthumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo

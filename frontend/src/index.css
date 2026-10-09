@@ -1,0 +1,73 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where([class~="dark"], [class~="dark"] *));
+
+@theme {
+  --color-sentinel-50: #faf8ff;
+  --color-sentinel-100: #f3effe;
+  --color-sentinel-200: #e9e2fe;
+  --color-sentinel-300: #d6c8fd;
+  --color-sentinel-400: #bba4fc;
+  --color-sentinel-500: #9d7df9;
+  --color-sentinel-600: #8655f4;
+  --color-sentinel-700: #7138e6;
+  --color-sentinel-800: #5d2bbf;
+  --color-sentinel-900: #4c229e;
+  --color-sentinel-950: #2b0e68;
+
+  --color-lavender-50: #faf8ff;
+  --color-lavender-100: #f3effe;
+  --color-lavender-200: #e9e2fe;
+  --color-lavender-300: #d6c8fd;
+  --color-lavender-400: #bba4fc;
+  --color-lavender-500: #9d7df9;
+  --color-lavender-600: #8655f4;
+  --color-lavender-700: #7138e6;
+  --color-lavender-800: #5d2bbf;
+  --color-lavender-900: #4c229e;
+  --color-lavender-950: #2b0e68;
+
+  --color-navy-800: #241b3d;
+  --color-navy-850: #1a1230;
+  --color-navy-900: #120b24;
+  --color-navy-950: #0a0616;
+
+  --color-veil-navy: #21186a;
+  --color-veil-teal: #008f9e;
+  --color-veil-teal-hover: #007582;
+}
+
+.tech-pattern {
+  background-image: radial-gradient(#ffffff 1px, transparent 1px);
+  background-size: 24px 24px;
+  opacity: 0.05;
+}
+
+body {
+  margin: 0;
+  background-color: #faf8ff;
+  color: #2e1065;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  transition: background-color 0.25s ease, color 0.25s ease;
+}
+
+html.dark body {
+  background-color: #0a0616;
+  color: #f3effe;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(157, 125, 249, 0.35);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(157, 125, 249, 0.6);
+}

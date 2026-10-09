@@ -1,0 +1,53 @@
+name: "Internal Sharing"
+description: "Cross-departmental hospital sharing: masks direct identifiers, retains longitudinal dates with consistent pseudonymization and diagnostic notes."
+version: "1.0.0"
+date_shift_days: 14 # consistent relative offset
+rules:
+  direct_identifiers:
+    action: "consistent_pseudonym" # e.g. PATIENT-7849
+    tags:
+      - "PatientName"
+      - "PatientID"
+      - "OtherPatientIDs"
+      - "PatientAddress"
+      - "PatientTelephoneNumbers"
+  quasi_identifiers:
+    action: "keep"
+    tags:
+      - "PatientBirthDate"
+      - "PatientAge"
+      - "PatientSex"
+      - "PatientWeight"
+  dates_and_times:
+    action: "date_shift"
+    tags:
+      - "StudyDate"
+      - "SeriesDate"
+      - "AcquisitionDate"
+  free_text:
+    action: "scrub_phi" # keep diagnostic text while scrubbing patient names/phone numbers
+    tags:
+      - "StudyDescription"
+      - "SeriesDescription"
+      - "ProtocolName"
+  private_tags:
+    action: "keep_known_safe" # keep scanner reconstruction tags, remove odd private tags with PHI
+  uids:
+    action: "consistent_pseudonym"
+    tags:
+      - "StudyInstanceUID"
+      - "SeriesInstanceUID"
+      - "SOPInstanceUID"
+  pixel_phi:
+    action: "black_box_mask"
+    mask_burned_in_text: true
+    mask_barcodes: true
+    mask_qr_codes: true
+  essential_clinical_tags:
+    action: "keep"
+    tags:
+      - "Modality"
+      - "Rows"
+      - "Columns"
+      - "PixelSpacing"
+      - "SliceThickness"

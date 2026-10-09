@@ -1,0 +1,76 @@
+name: "Strict Research Release"
+description: "Maximum de-identification compliant with HIPAA Safe Harbor and GDPR pseudonymization standards for open scientific release."
+version: "1.0.0"
+date_shift_days: 0 # 0 means remove all dates or truncate to year
+rules:
+  direct_identifiers:
+    action: "remove" # or blank
+    tags:
+      - "PatientName"
+      - "PatientID"
+      - "OtherPatientIDs"
+      - "PatientAddress"
+      - "PatientMotherBirthName"
+      - "InsurancePlanIdentification"
+      - "PatientTelephoneNumbers"
+      - "IssuerOfPatientID"
+  quasi_identifiers:
+    action: "mask_or_generalize"
+    tags:
+      - "PatientBirthDate" # removed or set to 19000101
+      - "PatientAge"        # keep if <= 89, else set to "90Y"
+      - "PatientSex"        # keep
+      - "PatientWeight"     # blank
+      - "PatientSize"       # blank
+  dates_and_times:
+    action: "date_shift" # shifts all dates by a consistent salt offset per study
+    tags:
+      - "StudyDate"
+      - "SeriesDate"
+      - "AcquisitionDate"
+      - "ContentDate"
+      - "StudyTime"
+      - "SeriesTime"
+      - "AcquisitionTime"
+  free_text:
+    action: "remove"
+    tags:
+      - "StudyDescription"
+      - "SeriesDescription"
+      - "StudyComments"
+      - "ImageComments"
+      - "ProtocolName"
+      - "AdmittingDiagnosesDescription"
+  private_tags:
+    action: "remove_all" # all odd group numbers (0009, 0011, 0019, 0029, ...)
+  uids:
+    action: "consistent_pseudonym" # remap using HMAC-SHA256 rooted in standard DICOM UID root 2.25.x
+    tags:
+      - "StudyInstanceUID"
+      - "SeriesInstanceUID"
+      - "SOPInstanceUID"
+      - "FrameOfReferenceUID"
+  pixel_phi:
+    action: "black_box_mask" # fill bounding box with zeroes + 4px padding
+    mask_burned_in_text: true
+    mask_barcodes: true
+    mask_qr_codes: true
+  essential_clinical_tags:
+    action: "keep"
+    tags:
+      - "Modality"
+      - "BodyPartExamined"
+      - "Rows"
+      - "Columns"
+      - "BitsAllocated"
+      - "BitsStored"
+      - "HighBit"
+      - "PixelRepresentation"
+      - "SamplesPerPixel"
+      - "PhotometricInterpretation"
+      - "PixelSpacing"
+      - "SliceThickness"
+      - "WindowCenter"
+      - "WindowWidth"
+      - "RescaleIntercept"
+      - "RescaleSlope"

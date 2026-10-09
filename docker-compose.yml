@@ -1,0 +1,24 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    ports:
+      - "8000:8000"
+    environment:
+      - HOST=0.0.0.0
+      - PORT=8000
+      - SENTINEL_UID_SALT=sentinel_veilguard_secure_salt_2026
+    volumes:
+      - ./storage:/app/storage
+      - ./samples:/app/samples
+      - ./policies:/app/policies
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
