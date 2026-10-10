@@ -1,9 +1,12 @@
 import os
 from pathlib import Path
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+
 try:
     from dotenv import load_dotenv
     load_dotenv(BASE_DIR / ".env")
-except ImportError:
+except Exception:
     pass
 
 BACKEND_DIR = BASE_DIR / "backend"
