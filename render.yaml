@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: sentinel-dicom-veilguard
+    env: docker
+    dockerfilePath: Dockerfile
+    plan: free
+    region: oregon
+    envVars:
+      - key: SENTINEL_UID_SALT
+        generateValue: true
+      - key: HOST
+        value: 0.0.0.0
+      - key: PORT
+        value: 8000
