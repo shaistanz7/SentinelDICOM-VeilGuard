@@ -1,10 +1,10 @@
 import os
 from pathlib import Path
-from dotenv import load_dotenv
-
-BASE_DIR = Path(__file__).resolve().parent.parent
-# Load .env file automatically
-load_dotenv(BASE_DIR / ".env")
+try:
+    from dotenv import load_dotenv
+    load_dotenv(BASE_DIR / ".env")
+except ImportError:
+    pass
 
 BACKEND_DIR = BASE_DIR / "backend"
 STORAGE_DIR = BASE_DIR / "storage"
