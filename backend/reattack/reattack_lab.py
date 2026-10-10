@@ -234,6 +234,9 @@ class ReAttackLab:
         ghost_strokes = []
         for c in contours:
             cx, cy, cw, ch = cv2.boundingRect(c)
+            # Preserve technical acquisition metadata (Series/Image numbers in top-right and technical footer)
+            if (cx >= int(w * 0.72) and 50 <= cy <= int(h * 0.22)) or (cy >= int(h * 0.86)):
+                continue
             roi_mean = float(np.mean(gray[cy:cy+ch, cx:cx+cw])) if (ch > 0 and cw > 0) else 0.0
             is_header = (cy + ch <= int(h * 0.16)) or ((cy < int(h * 0.18)) and not (int(w * 0.35) <= cx <= int(w * 0.65)))
             is_footer = (cy >= int(h * 0.84)) or ((cy >= int(h * 0.82)) and not (int(w * 0.35) <= cx <= int(w * 0.65)))

@@ -141,10 +141,20 @@ def detect_burned_in_text(gray: np.ndarray, modality: str = "") -> List[Discover
 
             for line in line_boxes:
                 txt = line["text"]
+                lx, ly, lw, lh = line["x"], line["y"], line["w"], line["h"]
+
+                # Preserve technical acquisition metadata (Series/Image numbers and technical footer)
+                is_technical_meta = (
+                    any(k in txt.lower() for k in ["series", "image", "img", "recon", "slice thickness", "dfov", "matrix", "zoom", "kv", "kvp", "ma"])
+                    and not any(k in txt.lower() for k in ["mrn", "dob", "patient", "dr", "id", "hospital", "name", "doe", "smith", "williams", "accession", "gender"])
+                )
+                is_acq_zone = (lx >= int(img_w * 0.72) and 50 <= ly <= int(img_h * 0.22)) or (ly >= int(img_h * 0.86))
+                if is_technical_meta or (is_acq_zone and not any(k in txt.lower() for k in ["patient", "mrn", "dob", "accession", "smith", "doe"])):
+                    continue
+
                 # Only flag lines that look like clinical/patient text
-                is_phi = any(k in txt.lower() for k in ["mrn", "dob", "patient", "dr", "id", "hospital", "st", "scan", "name", "doe", "smith", "williams"]) or len(txt) > 8
+                is_phi = any(k in txt.lower() for k in ["mrn", "dob", "patient", "dr", "id", "hospital", "st", "scan", "name", "doe", "smith", "williams", "accession", "study", "gender"]) or len(txt) > 8
                 if is_phi:
-                    lx, ly, lw, lh = line["x"], line["y"], line["w"], line["h"]
                     findings.append(DiscoveredFinding(
                         category="Pixel Text",
                         tag_or_location=f"Pixel Box [{lx}, {ly}, {lw}, {lh}]",
@@ -185,6 +195,9 @@ def detect_burned_in_text(gray: np.ndarray, modality: str = "") -> List[Discover
     contours, _ = cv2.findContours(dilated, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     for c in contours:
         x, y, w, h = cv2.boundingRect(c)
+        # Preserve technical acquisition metadata (Series/Image numbers in top-right and technical footer)
+        if (x >= int(img_w * 0.72) and 50 <= y <= int(img_h * 0.22)) or (y >= int(img_h * 0.86)):
+            continue
         roi_mean = float(np.mean(gray[y:y+h, x:x+w])) if (h > 0 and w > 0) else 0.0
         is_header = (y + h <= int(img_h * 0.16)) or ((y < int(img_h * 0.18)) and not (int(img_w * 0.35) <= x <= int(img_w * 0.65)))
         is_footer = (y >= int(img_h * 0.84)) or ((y >= int(img_h * 0.82)) and not (int(img_w * 0.35) <= x <= int(img_w * 0.65)))
@@ -213,6 +226,9 @@ def detect_burned_in_text(gray: np.ndarray, modality: str = "") -> List[Discover
     contours_direct, _ = cv2.findContours(dilated_direct, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     for c in contours_direct:
         x, y, w, h = cv2.boundingRect(c)
+        # Preserve technical acquisition metadata (Series/Image numbers in top-right and technical footer)
+        if (x >= int(img_w * 0.72) and 50 <= y <= int(img_h * 0.22)) or (y >= int(img_h * 0.86)):
+            continue
         roi_mean = float(np.mean(gray[y:y+h, x:x+w])) if (h > 0 and w > 0) else 0.0
         is_header = (y + h <= int(img_h * 0.16)) or ((y < int(img_h * 0.18)) and not (int(img_w * 0.35) <= x <= int(img_w * 0.65)))
         is_footer = (y >= int(img_h * 0.84)) or ((y >= int(img_h * 0.82)) and not (int(img_w * 0.35) <= x <= int(img_w * 0.65)))

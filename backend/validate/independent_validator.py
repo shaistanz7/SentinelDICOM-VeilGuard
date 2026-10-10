@@ -155,6 +155,9 @@ class IndependentValidator:
             red_boxes = redacted_bboxes or []
             for c in contours_val:
                 cx, cy, cw, ch = cv2.boundingRect(c)
+                # Preserve technical acquisition metadata (Series/Image numbers in top-right and technical footer)
+                if (cx >= int(img_w * 0.72) and 50 <= cy <= int(img_h * 0.22)) or (cy >= int(img_h * 0.86)):
+                    continue
                 roi_mean = float(np.mean(gray_proc[cy:cy+ch, cx:cx+cw])) if (ch > 0 and cw > 0) else 0.0
                 is_header = (cy + ch <= int(img_h * 0.16)) or ((cy < int(img_h * 0.18)) and not (int(img_w * 0.35) <= cx <= int(img_w * 0.65)))
                 is_footer = (cy >= int(img_h * 0.84)) or ((cy >= int(img_h * 0.82)) and not (int(img_w * 0.35) <= cx <= int(img_w * 0.65)))

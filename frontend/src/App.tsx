@@ -57,7 +57,12 @@ export const App: React.FC = () => {
   const refreshJobs = () => {
     fetch('/api/jobs')
       .then((res) => res.json())
-      .then((data) => setJobs(data))
+      .then((data) => {
+        setJobs(data);
+        if (data && data.length > 0) {
+          setCurrentJobId((prev) => prev || data[0].id);
+        }
+      })
       .catch((e) => console.error(e));
   };
 
