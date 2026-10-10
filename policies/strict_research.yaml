@@ -14,6 +14,15 @@ rules:
       - "InsurancePlanIdentification"
       - "PatientTelephoneNumbers"
       - "IssuerOfPatientID"
+      - "AccessionNumber"
+      - "InstitutionName"
+      - "InstitutionAddress"
+      - "InstitutionalDepartmentName"
+      - "ReferringPhysicianName"
+      - "PerformingPhysicianName"
+      - "PhysiciansOfRecord"
+      - "NameOfPhysiciansReadingStudy"
+      - "OperatorsName"
   quasi_identifiers:
     action: "mask_or_generalize"
     tags:

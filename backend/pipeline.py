@@ -16,6 +16,7 @@ from backend.validate import IndependentValidator
 from backend.redteam import AdversarialPrivacyTester
 from backend.gate import FailClosedReleaseGate
 from backend.audit import AuditHashChain
+from backend.reattack import ReAttackLab
 
 TIME_COMPLEXITY_SPEC = {
     "discover": {
@@ -41,6 +42,12 @@ TIME_COMPLEXITY_SPEC = {
         "formula": "O(W · H)",
         "name": "Multi-Scale High-Pass Edge & Frequency Penetration",
         "description": "Adaptive edge equalization, Laplacian gradient variance, and dictionary substring token matching."
+    },
+    "reattack": {
+        "stage": "ReAttackLab: Adversarial Self-Check",
+        "formula": "O(W · H + N)",
+        "name": "5-Vector Autonomous Re-Attack & Self-Healing Loop",
+        "description": "Ghost text edge penetration, metadata inversion, 2D QR matrix scanning, LSB noise test, and byte invariance assurance."
     },
     "gate": {
         "stage": "Stage 5: Fail-Closed Release Gate",
@@ -261,6 +268,62 @@ def run_job_pipeline(
         output_hash=output_hash
     )
 
+    # REATTACK LAB: Autonomous Adversarial Self-Check (Does not blindly trust redactions)
+    s_reattack_start = time.perf_counter()
+    cursor.execute("UPDATE jobs SET stage='reattack', stage_progress=90, updated_at=? WHERE id=?", (now_iso, job_id))
+    conn.commit()
+
+    reattack_lab = ReAttackLab(auto_heal_enabled=True)
+    reattack_report, healed_ds = reattack_lab.run_reattack_suite(
+        original_ds=orig_ds,
+        processed_ds=fresh_transformed_ds,
+        redacted_bboxes=bboxes_to_check,
+        job_id=job_id,
+        filename=input_file.name
+    )
+
+    # If ReAttackLab auto-healed residual ghost strokes, update output file and dataset
+    if reattack_report.auto_healed:
+        try:
+            pydicom.dcmwrite(str(processed_out_path), healed_ds, write_like_original=False)
+        except Exception:
+            healed_ds.save_as(str(processed_out_path))
+        output_hash = compute_file_hash(str(processed_out_path))
+        fresh_transformed_ds = healed_ds
+
+    cursor.execute("DELETE FROM reattack_results WHERE job_id = ?", (job_id,))
+    for vec in reattack_report.vectors:
+        cursor.execute("""
+            INSERT INTO reattack_results (
+                id, job_id, vector_name, category, status, immunity_pct,
+                description, evidence, details_json, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            vec.id, job_id, vec.vector_name, vec.category, vec.status,
+            vec.immunity_pct, vec.description, vec.evidence,
+            json.dumps(vec.details), now_iso
+        ))
+    cursor.execute(
+        "UPDATE jobs SET reattack_score = ?, reattack_verdict = ? WHERE id = ?",
+        (reattack_report.overall_immunity_pct, reattack_report.verdict, job_id)
+    )
+    conn.commit()
+    stage_latencies["reattack"] = round((time.perf_counter() - s_reattack_start) * 1000, 2)
+
+    AuditHashChain.record_event(
+        action="REATTACK_LAB_AUDIT_COMPLETE",
+        actor="ReAttackLab Autonomous Adversary",
+        job_id=job_id,
+        details={
+            "overall_immunity_pct": reattack_report.overall_immunity_pct,
+            "verdict": reattack_report.verdict,
+            "auto_healed": reattack_report.auto_healed,
+            "latency_ms": stage_latencies["reattack"]
+        },
+        input_hash=input_hash,
+        output_hash=output_hash
+    )
+
     # STAGE 5: Fail-Closed Release Gate (Complexity: O(1))
     s5_start = time.perf_counter()
     cursor.execute("UPDATE jobs SET stage='gate', stage_progress=100, updated_at=? WHERE id=?", (now_iso, job_id))
@@ -271,7 +334,8 @@ def run_job_pipeline(
         validation_passed=val_passed,
         risk_score=risk_score,
         min_confidence=min_confidence,
-        has_quarantine_flag=has_planted_corrupt_quarantine
+        has_quarantine_flag=has_planted_corrupt_quarantine,
+        reattack_verdict=reattack_report.verdict
     )
 
     # Handle Reviewer manual decision override if provided
@@ -364,6 +428,9 @@ def run_job_pipeline(
         "changes_count": len(changes_log),
         "latency_ms": total_latency_ms,
         "stage_latencies": stage_latencies,
+        "reattack_score": reattack_report.overall_immunity_pct,
+        "reattack_verdict": reattack_report.verdict,
+        "reattack_report": reattack_report.to_dict(),
         "time_complexity": TIME_COMPLEXITY_SPEC
     }
 

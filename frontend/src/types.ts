@@ -34,11 +34,38 @@ export interface RedTeamResult {
   evidence?: string;
 }
 
+export interface ReAttackVector {
+  id: string;
+  job_id: string;
+  vector_name: string;
+  category: string;
+  status: 'DEFENDED' | 'PENETRATED' | 'AUTO_HEALED';
+  immunity_pct: number;
+  description: string;
+  evidence: string;
+  details?: Record<string, any>;
+  created_at?: string;
+}
+
+export interface ReAttackReport {
+  job_id: string;
+  overall_immunity_pct: number;
+  verdict: 'IMMUNE' | 'VULNERABILITY_FOUND' | 'AUTO_HEALED';
+  vectors_executed: number;
+  defended_count: number;
+  penetrated_count: number;
+  auto_healed?: boolean;
+  execution_latency_ms?: number;
+  timestamp?: string;
+  vectors: ReAttackVector[];
+}
+
 export interface StageLatencies {
   discover?: number;
   transform?: number;
   validate?: number;
   redteam?: number;
+  reattack?: number;
   gate?: number;
   total?: number;
 }
@@ -56,7 +83,7 @@ export interface JobDetail {
   filename: string;
   policy_name: string;
   status: 'processing' | 'approved' | 'needs_human_review' | 'quarantined' | 'pending';
-  stage: 'discover' | 'transform' | 'validate' | 'redteam' | 'gate' | 'finished';
+  stage: 'discover' | 'transform' | 'validate' | 'redteam' | 'reattack' | 'gate' | 'finished';
   stage_progress: number;
   input_hash?: string;
   output_hash?: string;
@@ -68,6 +95,8 @@ export interface JobDetail {
   reviewer_notes?: string;
   latency_ms?: number;
   accuracy_pct?: number;
+  reattack_score?: number;
+  reattack_verdict?: 'IMMUNE' | 'VULNERABILITY_FOUND' | 'AUTO_HEALED';
   stage_latencies?: StageLatencies;
   time_complexity?: Record<string, StageComplexityInfo>;
   created_at: string;
@@ -75,6 +104,7 @@ export interface JobDetail {
   findings?: Finding[];
   validation_checks?: ValidationCheck[];
   redteam_results?: RedTeamResult[];
+  reattack_results?: ReAttackVector[];
 }
 
 export interface DiffItem {

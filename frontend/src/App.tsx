@@ -6,6 +6,7 @@ import { UploadView } from './components/UploadView';
 import { PipelineView } from './components/PipelineView';
 import { FindingsView } from './components/FindingsView';
 import { BeforeAfterView } from './components/BeforeAfterView';
+import { ReAttackLabView } from './components/ReAttackLabView';
 import { VerdictView } from './components/VerdictView';
 import { ReviewQueueView } from './components/ReviewQueueView';
 import { AuditLogView } from './components/AuditLogView';
@@ -100,6 +101,14 @@ export const App: React.FC = () => {
 
     return () => clearInterval(interval);
   }, [currentJobId]);
+
+  const refreshCurrentJob = () => {
+    if (!currentJobId) return;
+    fetch(`/api/jobs/${currentJobId}`)
+      .then((res) => res.json())
+      .then((data: JobDetail) => setCurrentJob(data))
+      .catch((e) => console.error(e));
+  };
 
   // Handlers
   const handleUploadFile = async (file: File) => {
@@ -225,6 +234,16 @@ export const App: React.FC = () => {
 
         {currentTab === 'before_after' && currentJob && (
           <BeforeAfterView job={currentJob} isExpertMode={isExpertMode} />
+        )}
+
+        {currentTab === 'reattack' && currentJob && (
+          <ReAttackLabView
+            job={currentJob}
+            onRefreshJob={refreshCurrentJob}
+            isExpertMode={isExpertMode}
+            onGoToDiff={() => setCurrentTab('before_after')}
+            onGoToVerdict={() => setCurrentTab('verdict')}
+          />
         )}
 
         {currentTab === 'verdict' && currentJob && (

@@ -10,7 +10,7 @@ DIRECT_IDENTIFIERS = {
     "PatientName", "PatientID", "OtherPatientIDs", "OtherPatientIDsSequence",
     "PatientAddress", "PatientTelephoneNumbers", "PatientMotherBirthName",
     "InsurancePlanIdentification", "IssuerOfPatientID", "MedicalRecordLocator",
-    "PatientSocialSecurityNumber", "EthnicGroup"
+    "PatientSocialSecurityNumber", "EthnicGroup", "AccessionNumber"
 }
 
 QUASI_IDENTIFIERS = {

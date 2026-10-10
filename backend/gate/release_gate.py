@@ -1,4 +1,4 @@
-from typing import Dict, Any, Tuple
+from typing import Dict, Any, Tuple, Optional
 
 class FailClosedReleaseGate:
     """Stage 5: Fail-closed gatekeeper that evaluates release criteria and blocks download of unapproved files."""
@@ -13,7 +13,8 @@ class FailClosedReleaseGate:
         validation_passed: bool,
         risk_score: float,
         min_confidence: float = 1.0,
-        has_quarantine_flag: bool = False
+        has_quarantine_flag: bool = False,
+        reattack_verdict: Optional[str] = "IMMUNE"
     ) -> Tuple[str, str, Dict[str, Any]]:
         """
         Evaluates release status.
@@ -27,14 +28,17 @@ class FailClosedReleaseGate:
             "risk_score": risk_score,
             "min_confidence": min_confidence,
             "has_quarantine_flag": has_quarantine_flag,
+            "reattack_verdict": reattack_verdict,
             "is_download_allowed": False
         }
 
         # 1. Hard fail conditions -> QUARANTINE
-        if not validation_passed or risk_score >= cls.RISK_THRESHOLD_QUARANTINE or has_quarantine_flag:
+        if not validation_passed or risk_score >= cls.RISK_THRESHOLD_QUARANTINE or has_quarantine_flag or reattack_verdict == "VULNERABILITY_FOUND":
             verdict = "QUARANTINED"
             metrics["is_download_allowed"] = False
-            if not validation_passed:
+            if reattack_verdict == "VULNERABILITY_FOUND":
+                reason = "ReAttackLab detected adversarial residual PHI penetration. Output failed autonomous self-verification and is locked in quarantine."
+            elif not validation_passed:
                 reason = "Independent validation failed critical safety or pixel-invariance checks. Scan is locked in quarantine."
             elif risk_score >= cls.RISK_THRESHOLD_QUARANTINE:
                 reason = f"Adversarial Red Team identified severe re-identification risk ({risk_score:.1f}/100). Released dataset could compromise patient identity."

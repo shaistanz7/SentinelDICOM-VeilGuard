@@ -1,5 +1,6 @@
 import yaml
 import copy
+import re
 from datetime import datetime, timedelta
 import pydicom
 from pydicom.dataset import Dataset
@@ -97,12 +98,20 @@ class PolicyTransformEngine:
                 new_meta_uid = global_uid_remapper.remap(old_meta_uid)
                 out_ds.file_meta.MediaStorageSOPInstanceUID = new_meta_uid
 
-        # 3. Direct Identifiers
         direct_rule = self.rules.get("direct_identifiers", {}).get("action", "remove")
-        direct_tags = self.rules.get("direct_identifiers", {}).get("tags", [
+        direct_tags = set(self.rules.get("direct_identifiers", {}).get("tags", [
             "PatientName", "PatientID", "OtherPatientIDs", "PatientAddress", "PatientTelephoneNumbers"
-        ])
-        for tag in direct_tags:
+        ]))
+        # Dynamically include any direct identifier findings discovered
+        for f in findings:
+            if f.category == "Direct Identifier" and not f.bbox:
+                match = re.search(r'\[(.*?)\]', f.tag_or_location)
+                if match:
+                    direct_tags.add(match.group(1))
+                elif hasattr(out_ds, f.tag_or_location):
+                    direct_tags.add(f.tag_or_location)
+
+        for tag in sorted(direct_tags):
             if hasattr(out_ds, tag):
                 old_val = str(getattr(out_ds, tag))
                 if direct_rule == "remove":

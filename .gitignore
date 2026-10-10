@@ -28,6 +28,7 @@ wheels/
 .pytest_cache/
 .coverage
 htmlcov/
+samples/test_*.dcm
 
 # Node & Frontend
 node_modules/

@@ -1,9 +1,9 @@
 import React from 'react';
-import { Search, Wand2, CheckCircle2, ShieldAlert, Award, Loader2 } from 'lucide-react';
+import { Search, Wand2, CheckCircle2, ShieldAlert, Award, Loader2, Crosshair } from 'lucide-react';
 import { StageLatencies } from '../types';
 
 interface StageTrackerProps {
-  currentStage: 'discover' | 'transform' | 'validate' | 'redteam' | 'gate' | 'finished';
+  currentStage: 'discover' | 'transform' | 'validate' | 'redteam' | 'reattack' | 'gate' | 'finished';
   progress: number;
   status: string;
   stageLatencies?: StageLatencies;
@@ -47,8 +47,15 @@ export const StageTracker: React.FC<StageTrackerProps> = ({
       icon: ShieldAlert,
     },
     {
+      id: 'reattack',
+      title: '5. ReAttackLab Self-Check',
+      complexity: 'O(W · H + N)',
+      friendlyText: 'Autonomous 5-vector adversarial self-check & self-healing verification...',
+      icon: Crosshair,
+    },
+    {
       id: 'gate',
-      title: '5. Fail-Closed Release Gate',
+      title: '6. Fail-Closed Release Gate',
       complexity: 'O(1)',
       friendlyText: 'Calculating final clearance: Approved for download, Human Review, or locked Quarantine...',
       icon: Award,
@@ -56,7 +63,7 @@ export const StageTracker: React.FC<StageTrackerProps> = ({
   ];
 
   const getStageStatus = (stageId: string, index: number) => {
-    const stageOrder = ['discover', 'transform', 'validate', 'redteam', 'gate', 'finished'];
+    const stageOrder = ['discover', 'transform', 'validate', 'redteam', 'reattack', 'gate', 'finished'];
     const currentIdx = stageOrder.indexOf(currentStage);
 
     if (currentStage === 'finished') return 'completed';

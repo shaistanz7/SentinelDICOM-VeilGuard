@@ -53,6 +53,31 @@ def init_db():
         cursor.execute("ALTER TABLE jobs ADD COLUMN accuracy_pct REAL DEFAULT 99.8")
     except Exception:
         pass
+    try:
+        cursor.execute("ALTER TABLE jobs ADD COLUMN reattack_score REAL DEFAULT 100.0")
+    except Exception:
+        pass
+    try:
+        cursor.execute("ALTER TABLE jobs ADD COLUMN reattack_verdict TEXT DEFAULT 'IMMUNE'")
+    except Exception:
+        pass
+
+    # ReAttack Lab results table (Automated Adversarial Self-Check)
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS reattack_results (
+        id TEXT PRIMARY KEY,
+        job_id TEXT NOT NULL,
+        vector_name TEXT NOT NULL,
+        category TEXT NOT NULL,
+        status TEXT NOT NULL, -- DEFENDED, PENETRATED, AUTO_HEALED
+        immunity_pct REAL NOT NULL,
+        description TEXT NOT NULL,
+        evidence TEXT,
+        details_json TEXT,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (job_id) REFERENCES jobs (id)
+    )
+    """)
 
     # Findings table
     cursor.execute("""

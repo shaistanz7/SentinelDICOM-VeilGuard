@@ -16,7 +16,8 @@ import {
   Lock,
   Sparkles,
   LogOut,
-  User
+  User,
+  Crosshair
 } from 'lucide-react';
 
 export type NavTab = 
@@ -25,6 +26,7 @@ export type NavTab =
   | 'pipeline' 
   | 'findings' 
   | 'before_after' 
+  | 'reattack'
   | 'verdict' 
   | 'review' 
   | 'audit' 
@@ -68,6 +70,7 @@ export const Navbar: React.FC<NavbarProps> = ({
     { id: 'pipeline', label: 'Live Pipeline', icon: Layers, disabled: !currentJobId },
     { id: 'findings', label: 'Findings Canvas', icon: Eye, disabled: !currentJobId },
     { id: 'before_after', label: 'Before/After Diff', icon: SplitSquareVertical, disabled: !currentJobId },
+    { id: 'reattack', label: 'ReAttackLab', icon: Crosshair, disabled: !currentJobId },
     { id: 'verdict', label: 'Release Gate', icon: Award, disabled: !currentJobId },
     { id: 'review', label: 'Review Queue', icon: UserCheck, badge: pendingReviewCount },
     { id: 'audit', label: 'Audit Trail', icon: History },
