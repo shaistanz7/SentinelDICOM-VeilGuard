@@ -112,43 +112,47 @@ def detect_burned_in_text(gray: np.ndarray, modality: str = "") -> List[Discover
         try:
             data = pytesseract.image_to_data(gray, output_type=pytesseract.Output.DICT)
             n_boxes = len(data["level"])
-            line_boxes = {}
+            line_boxes = []
             for i in range(n_boxes):
                 text = data["text"][i].strip()
                 conf = float(data["conf"][i])
                 if len(text) > 1 and conf > 30:
-                    line_num = (data["block_num"][i], data["line_num"][i])
                     x, y, w, h = data["left"][i], data["top"][i], data["width"][i], data["height"][i]
-                    if line_num not in line_boxes:
-                        line_boxes[line_num] = {"text": text, "x": x, "y": y, "w": w, "h": h, "conf": conf}
-                    else:
-                        lb = line_boxes[line_num]
-                        new_x = min(lb["x"], x)
-                        new_y = min(lb["y"], y)
-                        new_w = max(lb["x"] + lb["w"], x + w) - new_x
-                        new_h = max(lb["y"] + lb["h"], y + h) - new_y
-                        line_boxes[line_num] = {
-                            "text": f"{lb['text']} {text}",
-                            "x": new_x,
-                            "y": new_y,
-                            "w": new_w,
-                            "h": new_h,
-                            "conf": max(lb["conf"], conf)
-                        }
+                    # Merge only with words on roughly the same line with small gap (<= 24 px)
+                    merged = False
+                    for lb in line_boxes:
+                        if abs(lb["y"] - y) <= 6 and abs((lb["y"] + lb["h"]) - (y + h)) <= 6:
+                            gap = max(0, x - (lb["x"] + lb["w"]), lb["x"] - (x + w))
+                            if gap <= 24:
+                                new_x = min(lb["x"], x)
+                                new_y = min(lb["y"], y)
+                                new_w = max(lb["x"] + lb["w"], x + w) - new_x
+                                new_h = max(lb["y"] + lb["h"], y + h) - new_y
+                                lb["text"] = f"{lb['text']} {text}"
+                                lb["x"] = new_x
+                                lb["y"] = new_y
+                                lb["w"] = new_w
+                                lb["h"] = new_h
+                                lb["conf"] = max(lb["conf"], conf)
+                                merged = True
+                                break
+                    if not merged:
+                        line_boxes.append({"text": text, "x": x, "y": y, "w": w, "h": h, "conf": conf})
 
-            for line in line_boxes.values():
+            for line in line_boxes:
                 txt = line["text"]
                 # Only flag lines that look like clinical/patient text
                 is_phi = any(k in txt.lower() for k in ["mrn", "dob", "patient", "dr", "id", "hospital", "st", "scan", "name", "doe", "smith", "williams"]) or len(txt) > 8
                 if is_phi:
+                    lx, ly, lw, lh = line["x"], line["y"], line["w"], line["h"]
                     findings.append(DiscoveredFinding(
                         category="Pixel Text",
-                        tag_or_location=f"Pixel Box [{line['x']}, {line['y']}, {line['w']}, {line['h']}]",
+                        tag_or_location=f"Pixel Box [{lx}, {ly}, {lw}, {lh}]",
                         original_value=txt,
                         confidence=min(0.99, max(0.92, line["conf"] / 100.0)),
                         severity="CRITICAL" if any(k in txt.lower() for k in ["mrn", "id", "name", "dob", "smith", "doe"]) else "HIGH",
                         explanation=f"Burned-in textual annotation recognized via OCR: '{txt}'.",
-                        bbox=[line["x"], line["y"], line["w"], line["h"]]
+                        bbox=[int(lx), int(ly), int(lw), int(lh)]
                     ))
         except Exception:
             pass

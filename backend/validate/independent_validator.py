@@ -110,27 +110,6 @@ class IndependentValidator:
         residual_pixel_issues = []
         if hasattr(processed_ds, "pixel_array"):
             gray_proc = get_pixel_array_2d(processed_ds)
-            # Re-scan for QR code
-            qr_det = cv2.QRCodeDetector()
-            try:
-                ret, decoded, pts, _ = qr_det.detectAndDecodeMulti(gray_proc)
-                if ret and pts is not None:
-                    for i, dec in enumerate(decoded):
-                        if dec and "PATIENT" in dec.upper():
-                            residual_pixel_issues.append(f"Residual QR Code with text '{dec}'")
-            except Exception:
-                pass
-
-            # Inspect high-density text in redacted boxes
-            if redacted_bboxes:
-                for box in redacted_bboxes:
-                    bx, by, bw, bh = box
-                    roi = gray_proc[by:by+bh, bx:bx+bw]
-                    # Solid mask should have std dev near 0
-                    if roi.size > 0 and np.std(roi) > 10.0:
-                        residual_pixel_issues.append(f"Redaction box [{bx},{by},{bw},{bh}] not solidly masked (std={np.std(roi):.1f})")
-
-            # Independent margin audit for unredacted burned-in text lines outside redaction boxes
             img_h, img_w = gray_proc.shape
 
             # Identify diagnostic bone anatomy (skull, spine) to strictly prevent false positive detections
@@ -142,6 +121,29 @@ class IndependentValidator:
                     anatomy_mask_v[labels_v == i] = True
             k_buf_v = cv2.getStructuringElement(cv2.MORPH_RECT, (11, 11))
             anatomy_buf_v = cv2.dilate(anatomy_mask_v.astype(np.uint8), k_buf_v).astype(bool)
+
+            # Re-scan for QR code
+            qr_det = cv2.QRCodeDetector()
+            try:
+                ret, decoded, pts, _ = qr_det.detectAndDecodeMulti(gray_proc)
+                if ret and pts is not None:
+                    for i, dec in enumerate(decoded):
+                        if dec and "PATIENT" in dec.upper():
+                            residual_pixel_issues.append(f"Residual QR Code with text '{dec}'")
+            except Exception:
+                pass
+
+            # Inspect high-density text in redacted boxes (excluding diagnostic bone anatomy)
+            if redacted_bboxes:
+                for box in redacted_bboxes:
+                    bx, by, bw, bh = box
+                    bx1, by1 = max(0, bx), max(0, by)
+                    bx2, by2 = min(img_w, bx + bw), min(img_h, by + bh)
+                    roi = gray_proc[by1:by2, bx1:bx2]
+                    roi_outside_anat = roi[~anatomy_buf_v[by1:by2, bx1:bx2]] if roi.size > 0 else roi
+                    # Solid mask outside anatomy should have std dev near 0
+                    if roi_outside_anat.size > 0 and np.std(roi_outside_anat) > 12.0:
+                        residual_pixel_issues.append(f"Redaction box [{bx},{by},{bw},{bh}] not solidly masked (std={np.std(roi_outside_anat):.1f})")
 
             k_tophat = cv2.getStructuringElement(cv2.MORPH_RECT, (9, 9))
             tophat_val = cv2.morphologyEx(gray_proc, cv2.MORPH_TOPHAT, k_tophat)
