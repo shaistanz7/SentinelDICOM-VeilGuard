@@ -302,12 +302,21 @@ def get_processed_image(job_id: str, download: bool = False):
     """Streams or downloads de-identified DICOM pixel array as PNG."""
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT filename, processed_path FROM jobs WHERE id = ?", (job_id,))
+    cursor.execute("SELECT filename, processed_path, verdict FROM jobs WHERE id = ?", (job_id,))
     row = cursor.fetchone()
     conn.close()
 
     if not row or not row["processed_path"] or not os.path.exists(row["processed_path"]):
         raise HTTPException(status_code=404, detail="Processed image not found")
+
+    if download:
+        try:
+            FailClosedReleaseGate.assert_download_allowed(row["verdict"])
+        except PermissionError:
+            raise HTTPException(
+                status_code=403,
+                detail=f"Fail-Closed Gate Lockdown: Image export blocked! Scan verdict is '{row['verdict']}'. Only APPROVED files can be exported."
+            )
 
     ds = read_dicom_safe(row["processed_path"])
     png_bytes = dicom_to_png_bytes(ds)

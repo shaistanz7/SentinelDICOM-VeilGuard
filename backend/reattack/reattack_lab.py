@@ -53,7 +53,8 @@ class ReAttackLabReport:
         verdict: str,  # 'IMMUNE', 'VULNERABILITY_FOUND', 'AUTO_HEALED'
         vectors: List[ReAttackVectorResult],
         auto_healed: bool = False,
-        execution_latency_ms: float = 0.0
+        execution_latency_ms: float = 0.0,
+        updated_bboxes: Optional[List[List[int]]] = None
     ):
         self.job_id = job_id
         self.overall_immunity_pct = overall_immunity_pct
@@ -61,6 +62,7 @@ class ReAttackLabReport:
         self.vectors = vectors
         self.auto_healed = auto_healed
         self.execution_latency_ms = execution_latency_ms
+        self.updated_bboxes = updated_bboxes or []
         self.timestamp = datetime.now(timezone.utc).isoformat()
 
     def to_dict(self) -> Dict[str, Any]:
@@ -101,20 +103,21 @@ class ReAttackLab:
         Returns the audit report and potentially self-healed dataset."""
         start_t = time.perf_counter()
         vectors: List[ReAttackVectorResult] = []
-        effective_bboxes = redacted_bboxes if redacted_bboxes is not None else (bboxes or [])
+        effective_bboxes = list(redacted_bboxes if redacted_bboxes is not None else (bboxes or []))
         was_auto_healed = False
 
         # Gather target identity tokens from original scan
         original_tokens = self._extract_sensitive_tokens(original_ds)
 
         # Vector 1: Multi-Contrast Optical Ghost & Residual Stroke Penetration
-        v1, healed_ds, healed_flag = self._attack_optical_residual(
+        v1, healed_ds, healed_flag, updated_bboxes = self._attack_optical_residual(
             processed_ds, effective_bboxes, auto_heal=self.auto_heal_enabled
         )
         vectors.append(v1)
         if healed_flag:
             was_auto_healed = True
             processed_ds = healed_ds
+            effective_bboxes = updated_bboxes
 
         # Vector 2: Reverse Metadata & Pseudonym Inversion Penetration
         v2 = self._attack_metadata_inversion(original_ds, processed_ds, original_tokens, filename=filename)
@@ -155,7 +158,8 @@ class ReAttackLab:
             verdict=verdict,
             vectors=vectors,
             auto_healed=was_auto_healed,
-            execution_latency_ms=latency_ms
+            execution_latency_ms=latency_ms,
+            updated_bboxes=effective_bboxes
         )
 
         return report, processed_ds
@@ -182,7 +186,7 @@ class ReAttackLab:
         ds: pydicom.Dataset,
         bboxes: List[List[int]],
         auto_heal: bool = True
-    ) -> Tuple[ReAttackVectorResult, pydicom.Dataset, bool]:
+    ) -> Tuple[ReAttackVectorResult, pydicom.Dataset, bool, List[List[int]]]:
         """Vector 1: Multi-contrast CLAHE & morphological high-pass re-scan on sanitized pixel raster."""
         gray = get_pixel_array_2d(ds)
         if gray is None:
@@ -193,7 +197,7 @@ class ReAttackLab:
                 immunity_pct=100.0,
                 description="No pixel raster present in scan (metadata-only object).",
                 evidence="Pixel array is absent; immunity confirmed."
-            ), ds, False
+            ), ds, False, bboxes
 
         h, w = gray.shape
 
@@ -246,6 +250,7 @@ class ReAttackLab:
                     ghost_strokes.append([cx, cy, cw, ch])
 
         healed = False
+        combined_boxes = list(bboxes)
         if (box_violations or ghost_strokes) and auto_heal and ghost_strokes:
             # Self-healing: expand boxes and re-apply precision redaction
             extra_boxes = [[int(x), int(y), int(bw), int(bh)] for x, y, bw, bh in ghost_strokes]
@@ -262,7 +267,7 @@ class ReAttackLab:
                 description="Simulated adversary applied CLAHE, Top-Hat high-pass, and edge-gradient penetration across all post-redaction image coordinates.",
                 evidence=f"0 ghost strokes detected outside masks; all {len(bboxes)} declared redaction boxes confirmed solid and clean.",
                 details={"boxes_checked": len(bboxes), "residual_strokes": 0}
-            ), ds, False
+            ), ds, False, bboxes
         elif healed:
             return ReAttackVectorResult(
                 vector_name="Optical Ghost Text & Stroke Penetration",
@@ -272,7 +277,7 @@ class ReAttackLab:
                 description="ReAttackLab detected faint boundary character strokes, initiated autonomous self-healing scrub, and repelled optical penetration.",
                 evidence=f"Self-healed {len(ghost_strokes)} residual stroke region(s); secondary re-attack confirmed clean immunity.",
                 details={"auto_healed_boxes": ghost_strokes, "residual_strokes": 0}
-            ), ds, True
+            ), ds, True, combined_boxes
         else:
             return ReAttackVectorResult(
                 vector_name="Optical Ghost Text & Stroke Penetration",
@@ -282,7 +287,7 @@ class ReAttackLab:
                 description="Adversary detected unmasked residual text strokes or non-solid redaction boxes in post-release scan.",
                 evidence=f"Violations: {'; '.join(box_violations + [f'Residual stroke at {g}' for g in ghost_strokes])}",
                 details={"violations": box_violations, "ghost_strokes": ghost_strokes}
-            ), ds, False
+            ), ds, False, bboxes
 
     def _attack_metadata_inversion(
         self,
