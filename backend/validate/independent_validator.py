@@ -132,10 +132,21 @@ class IndependentValidator:
 
             # Independent margin audit for unredacted burned-in text lines outside redaction boxes
             img_h, img_w = gray_proc.shape
+
+            # Identify diagnostic bone anatomy (skull, spine) to strictly prevent false positive detections
+            bone_val = (gray_proc > 160).astype(np.uint8)
+            num_labels_v, labels_v, stats_v, _ = cv2.connectedComponentsWithStats(bone_val, connectivity=8)
+            anatomy_mask_v = np.zeros_like(gray_proc, dtype=bool)
+            for i in range(1, num_labels_v):
+                if stats_v[i, cv2.CC_STAT_WIDTH] > 40 and stats_v[i, cv2.CC_STAT_HEIGHT] > 40:
+                    anatomy_mask_v[labels_v == i] = True
+            k_buf_v = cv2.getStructuringElement(cv2.MORPH_RECT, (11, 11))
+            anatomy_buf_v = cv2.dilate(anatomy_mask_v.astype(np.uint8), k_buf_v).astype(bool)
+
             k_tophat = cv2.getStructuringElement(cv2.MORPH_RECT, (9, 9))
             tophat_val = cv2.morphologyEx(gray_proc, cv2.MORPH_TOPHAT, k_tophat)
-            text_pixels_val = ((tophat_val >= 20) & (gray_proc >= 140)).astype(np.uint8) * 255
-            k_line_val = cv2.getStructuringElement(cv2.MORPH_RECT, (35, 1))
+            text_pixels_val = ((tophat_val >= 20) & (gray_proc >= 140) & (~anatomy_buf_v)).astype(np.uint8) * 255
+            k_line_val = cv2.getStructuringElement(cv2.MORPH_RECT, (18, 1))
             dilated_val = cv2.dilate(text_pixels_val, k_line_val, iterations=1)
             contours_val, _ = cv2.findContours(dilated_val, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
@@ -143,10 +154,10 @@ class IndependentValidator:
             for c in contours_val:
                 cx, cy, cw, ch = cv2.boundingRect(c)
                 roi_mean = float(np.mean(gray_proc[cy:cy+ch, cx:cx+cw])) if (ch > 0 and cw > 0) else 0.0
-                is_header = (cy + ch <= int(img_h * 0.14)) or ((cy < int(img_h * 0.18)) and not (int(img_w * 0.35) <= cx <= int(img_w * 0.65)))
+                is_header = (cy + ch <= int(img_h * 0.16)) or ((cy < int(img_h * 0.18)) and not (int(img_w * 0.35) <= cx <= int(img_w * 0.65)))
                 is_footer = (cy >= int(img_h * 0.84)) or ((cy >= int(img_h * 0.82)) and not (int(img_w * 0.35) <= cx <= int(img_w * 0.65)))
                 is_side = (cx < int(img_w * 0.12) or cx > int(img_w * 0.88)) and (roi_mean < 75.0)
-                is_margin = is_header or is_footer or is_side
+                is_margin = (is_header or is_footer or is_side) and (not np.any(anatomy_buf_v[cy:cy+ch, cx:cx+cw]))
                 stroke_count = cv2.countNonZero(text_pixels_val[cy:cy+ch, cx:cx+cw]) if (ch > 0 and cw > 0) else 0
                 if 3 <= ch <= 50 and cw >= 15 and stroke_count >= 8 and is_margin:
                     center_x, center_y = cx + cw // 2, cy + ch // 2

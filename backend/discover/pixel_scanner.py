@@ -23,53 +23,49 @@ def detect_qr_codes(gray: np.ndarray) -> List[DiscoveredFinding]:
     findings = []
     qr_detector = cv2.QRCodeDetector()
     
+    h_img, w_img = gray.shape
     # Try both standard and inverted grayscale images
     for img_variant in [gray, 255 - gray]:
         try:
             retval, decoded_info, points, _ = qr_detector.detectAndDecodeMulti(img_variant)
-            if retval and points is not None:
+            if retval and points is not None and len(points) > 0:
                 for i, pts in enumerate(points):
                     pts = pts.astype(int)
                     x, y, w, h = cv2.boundingRect(pts)
-                    info_text = decoded_info[i] if (i < len(decoded_info) and decoded_info[i]) else "QR-Code Matrix Detected"
-                    if not any(f.bbox and abs(f.bbox[0] - x) < 15 and abs(f.bbox[1] - y) < 15 for f in findings):
-                        findings.append(DiscoveredFinding(
-                            category="Barcode/QR",
-                            tag_or_location=f"Pixel Box [{x}, {y}, {w}, {h}]",
-                            original_value=info_text,
-                            confidence=0.98,
-                            severity="CRITICAL",
-                            explanation=f"2D QR Code Matrix detected in image pixels at coordinates ({x}, {y}, {w}x{h}). Payload contains patient data.",
-                            bbox=[int(x), int(y), int(w), int(h)]
-                        ))
+                    if w <= int(w_img * 0.45) and h <= int(h_img * 0.45) and 0.7 <= float(w)/max(h, 1) <= 1.4:
+                        info_text = decoded_info[i] if (i < len(decoded_info) and decoded_info[i]) else "QR-Code Matrix Detected"
+                        if not any(f.bbox and abs(f.bbox[0] - x) < 15 and abs(f.bbox[1] - y) < 15 for f in findings):
+                            findings.append(DiscoveredFinding(
+                                category="Barcode/QR",
+                                tag_or_location=f"Pixel Box [{x}, {y}, {w}, {h}]",
+                                original_value=info_text,
+                                confidence=0.98,
+                                severity="CRITICAL",
+                                explanation=f"2D QR Code Matrix detected in image pixels at coordinates ({x}, {y}, {w}x{h}). Payload contains patient data.",
+                                bbox=[int(x), int(y), int(w), int(h)]
+                            ))
         except Exception:
             pass
 
-    # Fallback finder-pattern scan for high-frequency QR matrix blocks
-    if not findings:
-        h_img, w_img = gray.shape
-        # Check corners and margins
-        check_regions = [
-            (w_img - 150, h_img - 150, 140, 140),
-            (10, h_img - 150, 140, 140),
-            (w_img - 150, 10, 140, 140),
-        ]
-        for cx, cy, cw, ch in check_regions:
-            if cx >= 0 and cy >= 0 and cx + cw <= w_img and cy + ch <= h_img:
-                roi = gray[cy:cy+ch, cx:cx+cw]
-                edges = cv2.Canny(roi, 80, 180)
-                edge_density = np.sum(edges > 0) / (cw * ch)
-                if edge_density > 0.08:
-                    findings.append(DiscoveredFinding(
-                        category="Barcode/QR",
-                        tag_or_location=f"Pixel Box [{cx}, {cy}, {cw}, {ch}]",
-                        original_value="QR Matrix Pattern [Planted Optical PHI Code]",
-                        confidence=0.95,
-                        severity="CRITICAL",
-                        explanation=f"High-frequency 2D matrix / QR code detected in image region [{cx}, {cy}, {cw}, {ch}].",
-                        bbox=[int(cx), int(cy), int(cw), int(ch)]
-                    ))
-                    break
+        if not findings:
+            try:
+                retval, points = qr_detector.detect(img_variant)
+                if retval and points is not None and len(points) > 0:
+                    pts = points[0].astype(int) if points.ndim == 3 else points.astype(int)
+                    x, y, w, h = cv2.boundingRect(pts)
+                    if w <= int(w_img * 0.45) and h <= int(h_img * 0.45) and 0.7 <= float(w)/max(h, 1) <= 1.4:
+                        if not any(f.bbox and abs(f.bbox[0] - x) < 15 and abs(f.bbox[1] - y) < 15 for f in findings):
+                            findings.append(DiscoveredFinding(
+                                category="Barcode/QR",
+                                tag_or_location=f"Pixel Box [{x}, {y}, {w}, {h}]",
+                                original_value="QR Matrix Pattern [Planted Optical PHI Code]",
+                                confidence=0.98,
+                                severity="CRITICAL",
+                                explanation=f"2D QR Code Matrix detected in image pixels at coordinates ({x}, {y}, {w}x{h}).",
+                                bbox=[int(x), int(y), int(w), int(h)]
+                            ))
+            except Exception:
+                pass
 
     return findings
 
@@ -161,58 +157,96 @@ def detect_burned_in_text(gray: np.ndarray, modality: str = "") -> List[Discover
     is_us = (modality == "US" or "ultrasound" in modality.lower())
     raw_boxes = []
 
-    # Top-Hat stroke isolation: separates thin character strokes from thick tissue
+    # Identify large continuous diagnostic bone anatomy (skull, spine) to strictly prevent anatomy clipping
+    bone = (gray > 160).astype(np.uint8)
+    num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(bone, connectivity=8)
+    anatomy_mask = np.zeros_like(gray, dtype=bool)
+    for i in range(1, num_labels):
+        if stats[i, cv2.CC_STAT_WIDTH] > 40 and stats[i, cv2.CC_STAT_HEIGHT] > 40:
+            anatomy_mask[labels == i] = True
+
+    # Dilation safety buffer around anatomy
+    k_buf = cv2.getStructuringElement(cv2.MORPH_RECT, (11, 11))
+    anatomy_buffer = cv2.dilate(anatomy_mask.astype(np.uint8), k_buf).astype(bool)
+
+    # Top-Hat stroke isolation: separates thin character strokes strictly outside anatomy
     k_tophat = cv2.getStructuringElement(cv2.MORPH_RECT, (9, 9))
     tophat = cv2.morphologyEx(gray, cv2.MORPH_TOPHAT, k_tophat)
-    text_pixels = ((tophat >= 20) & (gray >= 140)).astype(np.uint8) * 255
+    text_pixels = ((tophat >= 20) & (gray >= 140) & (~anatomy_buffer)).astype(np.uint8) * 255
     
-    # Dilate horizontally to join individual character strokes into words & lines
-    k_line = cv2.getStructuringElement(cv2.MORPH_RECT, (35, 1))
+    # Dilate horizontally with word kernel (18, 1) to join strokes without bridging columns or anatomy
+    k_line = cv2.getStructuringElement(cv2.MORPH_RECT, (18, 1))
     dilated = cv2.dilate(text_pixels, k_line, iterations=1)
     
     contours, _ = cv2.findContours(dilated, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     for c in contours:
         x, y, w, h = cv2.boundingRect(c)
         roi_mean = float(np.mean(gray[y:y+h, x:x+w])) if (h > 0 and w > 0) else 0.0
-        is_header = (y + h <= int(img_h * 0.14)) or ((y < int(img_h * 0.18)) and not (int(img_w * 0.35) <= x <= int(img_w * 0.65)))
+        is_header = (y + h <= int(img_h * 0.16)) or ((y < int(img_h * 0.18)) and not (int(img_w * 0.35) <= x <= int(img_w * 0.65)))
         is_footer = (y >= int(img_h * 0.84)) or ((y >= int(img_h * 0.82)) and not (int(img_w * 0.35) <= x <= int(img_w * 0.65)))
         is_side = (x < int(img_w * 0.12) or x > int(img_w * 0.88)) and (roi_mean < 75.0)
         is_margin = is_header or is_footer or is_side
-        if 3 <= h <= 50 and w >= 15 and is_margin:
-            raw_boxes.append([x, y, w, h])
+        if 3 <= h <= 50 and 10 <= w <= int(img_w * 0.7) and is_margin:
+            # Clamp box away from anatomy buffer
+            if np.any(anatomy_buffer[y:y+h, x:x+w]):
+                if x < img_w // 2:
+                    anat_cols = np.where(np.any(anatomy_buffer[y:y+h, x:x+w], axis=0))[0]
+                    if len(anat_cols) > 0 and anat_cols[0] > 10:
+                        w = int(anat_cols[0])
+                else:
+                    anat_cols = np.where(np.any(anatomy_buffer[y:y+h, x:x+w], axis=0))[0]
+                    if len(anat_cols) > 0 and anat_cols[-1] < w - 10:
+                        offset = int(anat_cols[-1] + 1)
+                        x = x + offset
+                        w = w - offset
+            if not np.any(anatomy_buffer[y:y+h, x:x+w]) and w >= 10:
+                raw_boxes.append([x, y, w, h])
 
     # Direct thresholding for bright annotations on dark backgrounds
     _, thresh_direct = cv2.threshold(gray, 180, 255, cv2.THRESH_BINARY)
-    k_direct = cv2.getStructuringElement(cv2.MORPH_RECT, (15, 1))
-    dilated_direct = cv2.dilate(thresh_direct, k_direct, iterations=1)
+    thresh_direct[anatomy_buffer] = 0
+    dilated_direct = cv2.dilate(thresh_direct, k_line, iterations=1)
     contours_direct, _ = cv2.findContours(dilated_direct, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     for c in contours_direct:
         x, y, w, h = cv2.boundingRect(c)
         roi_mean = float(np.mean(gray[y:y+h, x:x+w])) if (h > 0 and w > 0) else 0.0
-        is_header = (y + h <= int(img_h * 0.14)) or ((y < int(img_h * 0.18)) and not (int(img_w * 0.35) <= x <= int(img_w * 0.65)))
+        is_header = (y + h <= int(img_h * 0.16)) or ((y < int(img_h * 0.18)) and not (int(img_w * 0.35) <= x <= int(img_w * 0.65)))
         is_footer = (y >= int(img_h * 0.84)) or ((y >= int(img_h * 0.82)) and not (int(img_w * 0.35) <= x <= int(img_w * 0.65)))
         is_side = (x < int(img_w * 0.12) or x > int(img_w * 0.88)) and (roi_mean < 75.0)
         is_margin = is_header or is_footer or is_side
-        if 3 <= h <= 50 and 15 <= w <= int(img_w * 0.9) and is_margin:
-            raw_boxes.append([x, y, w, h])
+        if 3 <= h <= 50 and 10 <= w <= int(img_w * 0.7) and is_margin:
+            if np.any(anatomy_buffer[y:y+h, x:x+w]):
+                if x < img_w // 2:
+                    anat_cols = np.where(np.any(anatomy_buffer[y:y+h, x:x+w], axis=0))[0]
+                    if len(anat_cols) > 0 and anat_cols[0] > 10:
+                        w = int(anat_cols[0])
+                else:
+                    anat_cols = np.where(np.any(anatomy_buffer[y:y+h, x:x+w], axis=0))[0]
+                    if len(anat_cols) > 0 and anat_cols[-1] < w - 10:
+                        offset = int(anat_cols[-1] + 1)
+                        x = x + offset
+                        w = w - offset
+            if not np.any(anatomy_buffer[y:y+h, x:x+w]) and w >= 10:
+                raw_boxes.append([x, y, w, h])
 
     raw_boxes.sort(key=lambda b: (b[1], b[0]))
 
-    # Merge collinear / overlapping text fragments on the same line
+    # Merge collinear / overlapping text fragments on the same line (tight gap <= 18 px)
     merged_boxes = []
     for b in raw_boxes:
         merged_flag = False
         for i, m in enumerate(merged_boxes):
-            if abs(b[1] - m[1]) <= 12 and abs((b[1]+b[3]) - (m[1]+m[3])) <= 12:
+            if abs(b[1] - m[1]) <= 6 and abs((b[1]+b[3]) - (m[1]+m[3])) <= 6:
                 gap = max(0, b[0] - (m[0] + m[2]), m[0] - (b[0] + b[2]))
-                if gap <= 70:
+                if gap <= 18:
                     nx = min(m[0], b[0])
                     ny = min(m[1], b[1])
                     nw = max(m[0] + m[2], b[0] + b[2]) - nx
                     nh = max(m[1] + m[3], b[1] + b[3]) - ny
-                    merged_boxes[i] = [nx, ny, nw, nh]
-                    merged_flag = True
-                    break
+                    if not np.any(anatomy_buffer[ny:ny+nh, nx:nx+nw]):
+                        merged_boxes[i] = [nx, ny, nw, nh]
+                        merged_flag = True
+                        break
         if not merged_flag:
             merged_boxes.append(b)
 
@@ -235,7 +269,8 @@ def detect_burned_in_text(gray: np.ndarray, modality: str = "") -> List[Discover
                         ny = min(fy, y)
                         nw = max(fx + fw, x + w) - nx
                         nh = max(fy + fh, y + h) - ny
-                        f.bbox = [int(nx), int(ny), int(nw), int(nh)]
+                        if not np.any(anatomy_buffer[ny:ny+nh, nx:nx+nw]):
+                            f.bbox = [int(nx), int(ny), int(nw), int(nh)]
                         overlap = True
                         break
         if not overlap:

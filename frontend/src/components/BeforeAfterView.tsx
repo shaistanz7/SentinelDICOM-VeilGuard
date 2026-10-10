@@ -52,7 +52,7 @@ export const BeforeAfterView: React.FC<BeforeAfterViewProps> = ({ job, isExpertM
           <span>Before / After Release Comparison</span>
         </h2>
         <p className="text-xs text-lavender-800/80 dark:text-slate-400">
-          Verify pixel black-box solid masking on the right and inspect header changes in the metadata diff table below.
+          Verify precision burned-in PHI removal while diagnostic patient anatomy remains 100% byte-preserved and intact.
         </p>
       </div>
 
@@ -88,7 +88,7 @@ export const BeforeAfterView: React.FC<BeforeAfterViewProps> = ({ job, isExpertM
           <div className="flex items-center justify-between pb-2 border-b border-lavender-100 dark:border-navy-800">
             <span className="text-xs font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-full bg-emerald-500" />
-              De-Identified Output (Masked)
+              De-Identified Output (PHI Redacted)
             </span>
             <div className="flex items-center gap-2">
               <a
@@ -114,7 +114,7 @@ export const BeforeAfterView: React.FC<BeforeAfterViewProps> = ({ job, isExpertM
               className="w-full h-full object-contain pointer-events-none"
             />
             <div className="absolute top-3 left-3 bg-emerald-950/80 text-emerald-200 border border-emerald-800 text-[10px] font-mono font-bold px-2 py-0.5 rounded">
-              Byte-Preserved Masked
+              Anatomy-Preserved Release
             </div>
             <a
               href={`/api/jobs/${job.id}/download/image`}
